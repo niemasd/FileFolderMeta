@@ -6,17 +6,28 @@ Calculate metadata from file(s) / folder(s) nested within a given path
 # standard imports
 from datetime import datetime
 from gzip import open as gopen
+from hashlib import md5, sha1, sha256
 from json import dump as jdump
 from pathlib import Path
 from sys import stderr
+from zlib import crc32
 import argparse
 
 # useful constants
 VERSION = '0.0.1'
+TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S %Z"
+
+# hash functionto calculate
+HASH_FUNCTIONS = {
+    'crc32': lambda x: f'{crc32(x):08x}',
+    'md5': lambda x: md5(x).hexdigest(),
+    'sha1': lambda x: sha1(x).hexdigest(),
+    'sha256': lambda x: sha256(x).hexdigest(),
+}
 
 # return the current time as a string
 def get_time():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now().strftime(TIMESTAMP_FORMAT_STRING)
 
 # print log message
 def print_log(s='', end='\n', file=stderr):
@@ -47,7 +58,7 @@ class OnDisk(Entity):
 class Directory(OnDisk):
     def __init__(self, path):
         super().__init__(path)
-        self.contents = None # initialize upon first `__iter__`
+        self.contents = None # initialize upon first `__iter__` call
     def __iter__(self):
         if self.contents is None:
             self.contents = [get_obj(p) for p in self.path.glob('*')]
@@ -62,10 +73,25 @@ class Directory(OnDisk):
 class File(OnDisk):
     def __init__(self, path):
         super().__init__(path)
+        self.stat_result = None # initialize upon first `stat` call
+        self.data = None # initialize upon first `get_data` call
+    def stat(self):
+        if self.stat_result is None:
+            self.stat_result = self.path.stat()
+        return self.stat_result
+    def get_data(self):
+        if self.data is None:
+            with open(self.path, 'rb') as self_f:
+                self.data = self_f.read()
+        return self.data
+    def get_timestamp(self):
+        return datetime.fromtimestamp(self.stat().st_mtime).astimezone().strftime(TIMESTAMP_FORMAT_STRING)
     def to_dict(self):
         return super().to_dict() | {
             'format': 'FILE',
-        }
+            'size': self.stat().st_size,
+            'date': self.get_timestamp(),
+        } | {k:HASH_FUNCTIONS[k](self.get_data()) for k in sorted(HASH_FUNCTIONS.keys())}
 
 # map file formats to classes
 INPUT_FORMAT_TO_CLASS = {
