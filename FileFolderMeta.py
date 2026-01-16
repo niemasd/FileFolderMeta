@@ -7,15 +7,17 @@ Calculate metadata from file(s) / folder(s) nested within a given path
 from datetime import datetime
 from gzip import open as gopen
 from hashlib import md5, sha1, sha256
+from io import BytesIO
 from json import dump as jdump
 from pathlib import Path
 from sys import stderr
+from zipfile import ZipFile
 from zlib import crc32
 import argparse
 
 # useful constants
 VERSION = '0.0.1'
-TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S %Z"
+TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 
 # hash functionto calculate
 HASH_FUNCTIONS = {
@@ -38,7 +40,7 @@ def error(s, exitcode=1, file=stderr):
     print_log(s, file=file); exit(exitcode)
 
 # class to represent the most generalized of entities (superclass of all other classes)
-class Entity:
+class FFM_Entity:
     def __init__(self, name):
         self.name = name
     def to_dict(self):
@@ -47,7 +49,7 @@ class Entity:
         }
 
 # class to represent files and directories on disk
-class OnDisk(Entity):
+class FFM_OnDisk(FFM_Entity):
     def __init__(self, path):
         super().__init__(path.name)
         self.path = path
@@ -55,14 +57,14 @@ class OnDisk(Entity):
         return super().to_dict()
 
 # class to represent directories
-class Directory(OnDisk):
+class FFM_Directory(FFM_OnDisk):
     def __init__(self, path):
         super().__init__(path)
-        self.contents = None # initialize upon first `__iter__` call
+        self.children = None # initialize upon first `__iter__` call
     def __iter__(self):
-        if self.contents is None:
-            self.contents = sorted((get_obj(p) for p in self.path.glob('*')), key=lambda x: x.path)
-        return iter(self.contents)
+        if self.children is None:
+            self.children = sorted((get_obj(p) for p in self.path.glob('*')), key=lambda x: x.name)
+        return iter(self.children)
     def to_dict(self):
         return super().to_dict() | {
             'format': 'DIR',
@@ -70,40 +72,81 @@ class Directory(OnDisk):
         }
 
 # class to represent arbitrary files (last resort if type-specific class doesn't exist)
-class File(OnDisk):
+class FFM_File(FFM_OnDisk):
     def __init__(self, path):
         super().__init__(path)
-        self.stat_result = None # initialize upon first `stat` call
         self.data = None # initialize upon first `get_data` call
-    def stat(self):
-        if self.stat_result is None:
-            self.stat_result = self.path.stat()
-        return self.stat_result
+        self.stat_result = None # initialize upon first `stat` call
+        self.timestamp = None # initialize upon first `get_timestamp` call
     def get_data(self):
         if self.data is None:
             with open(self.path, 'rb') as self_f:
                 self.data = self_f.read()
         return self.data
+    def get_size(self):
+        return len(self.get_data())
+    def stat(self):
+        if self.stat_result is None:
+            self.stat_result = self.path.stat()
+        return self.stat_result
     def get_timestamp(self):
-        return datetime.fromtimestamp(self.stat().st_mtime).astimezone().strftime(TIMESTAMP_FORMAT_STRING)
+        if self.timestamp is None:
+            self.timestamp = datetime.fromtimestamp(self.stat().st_mtime).astimezone().strftime(TIMESTAMP_FORMAT_STRING)
+        return self.timestamp
     def to_dict(self):
         return super().to_dict() | {
             'format': 'FILE',
-            'size': self.stat().st_size,
+            'size': self.get_size(),
             'date': self.get_timestamp(),
         } | {k:HASH_FUNCTIONS[k](self.get_data()) for k in sorted(HASH_FUNCTIONS.keys())}
 
+# class to represent ZIP files
+class FFM_ZipArchive(FFM_File):
+    def __init__(self, path):
+        super().__init__(path)
+        self.children = None # initialize upon first `__iter__` call
+    def __iter__(self):
+        if self.children is None:
+            self.children = list()
+            with ZipFile(BytesIO(self.get_data()), 'r') as zip_obj:
+                zip_path_entry_data = sorted((Path(zip_entry.filename), zip_entry, None if zip_entry.is_dir() else zip_obj.read(zip_entry.filename)) for zip_entry in zip_obj.infolist())
+            zip_path_to_obj = dict()
+            for zip_path, zip_entry, zip_data in zip_path_entry_data:
+                if zip_data is None:
+                    obj = FFM_Directory(zip_path)
+                else:
+                    obj = get_obj(zip_path)
+                    obj.data = zip_data
+                    obj.timestamp = datetime(*zip_entry.date_time).strftime(TIMESTAMP_FORMAT_STRING)
+                if '/' in str(zip_path):
+                    parent_obj = zip_path_to_obj[zip_path.parent]
+                    if parent_obj.children is None:
+                        parent_obj.children = list()
+                    parent_obj.children.append(obj)
+                else:
+                    self.children.append(obj)
+                zip_path_to_obj[zip_path] = obj
+            self.children.sort(key=lambda x: x.name)
+        return iter(self.children)
+    def to_dict(self):
+        out = super().to_dict() | {
+            'children': [child.to_dict() for child in self],
+        }
+        out['format'] = 'ZIP'
+        return out
+
 # map file formats to classes
 INPUT_FORMAT_TO_CLASS = {
-    'DIR': Directory,
-    'FILE': File,
+    'DIR': FFM_Directory,
+    'FILE': FFM_File,
+    'ZIP': FFM_ZipArchive,
 }
 
 # try to return the appropriate directory/file object from a given path
 def get_obj(path):
     # input path is a directory
     if path.is_dir():
-        return Directory(path)
+        return FFM_Directory(path)
 
     # try to infer class from file extension as last resort
     else:
@@ -111,16 +154,17 @@ def get_obj(path):
         if ext in INPUT_FORMAT_TO_CLASS:
             return INPUT_FORMAT_TO_CLASS[ext](path)
         else:
-            return File(path)
+            return FFM_File(path)
 INPUT_FORMAT_TO_CLASS['AUTO'] = get_obj
 
 # parse user args
 def parse_args():
     # use argparse to parse user arguments
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-i', '--input', required=True, type=str, help="Input File/Folder")
-    parser.add_argument('-o', '--output', required=False, type=str, default='stdout', help="Output JSON File")
-    parser.add_argument('-oi', '--output_indent', required=False, type=int, default=None, help="Number of of Spaces per Indent in Output")
+    parser.add_argument('-i', '--input', required=True, type=str, help="Input FFM_File/Folder")
+    parser.add_argument('-o', '--output', required=False, type=str, default='stdout', help="Output JSON FFM_File")
+    parser.add_argument('-oi', '--output_indent', required=False, type=int, default=None, help="Number of of Spaces per Indent in Output JSON")
+    parser.add_argument('-os', '--output_sort', action='store_true', help="Sort Keys in Output JSON Alphabetically")
     args = parser.parse_args()
 
     # check args for validity before returning
@@ -150,7 +194,7 @@ def main():
         output_f = gopen(args.output, 'wt')
     else:
         output_f = open(args.output, 'wt')
-    jdump(root.to_dict(), output_f, indent=args.output_indent)
+    jdump(root.to_dict(), output_f, indent=args.output_indent, sort_keys=args.output_sort)
     output_f.write('\n')
     output_f.close()
 
