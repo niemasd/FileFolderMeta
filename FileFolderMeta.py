@@ -21,10 +21,10 @@ TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 
 # hash functionto calculate
 HASH_FUNCTIONS = {
-    'crc32': lambda x: f'{crc32(x):08x}',
-    'md5': lambda x: md5(x).hexdigest(),
-    'sha1': lambda x: sha1(x).hexdigest(),
-    'sha256': lambda x: sha256(x).hexdigest(),
+    'crc32': lambda x: '0x' + f'{crc32(x):08x}',
+    'md5': lambda x: '0x' + md5(x).hexdigest(),
+    'sha1': lambda x: '0x' + sha1(x).hexdigest(),
+    'sha256': lambda x: '0x' + sha256(x).hexdigest(),
 }
 
 # return the current time as a string
@@ -142,28 +142,39 @@ class FFM_ZipArchive(FFM_File):
 
 # parse "YYYY-MM-DD HH:MM:SS" timestamp from `pycdlib.date.DirectoryRecordDate` object
 def parse_pycdlib_date(d):
-    return "%s-%s-%s %s:%s:%s" % (d.years_since_1900 + 1900, str(d.month).zfill(2), str(d.day_of_month).zfill(2), str(d.hour).zfill(2), str(d.minute).zfill(2), str(d.second).zfill(2))
+    if hasattr(d, 'year'):
+        yyyy = d.year
+    elif hasattr(d, 'years_since_1900'):
+        yyyy = d.years_since_1900 + 1900
+    else:
+        error("No year attribute: %s" % d)
+    if hasattr(d, 'day_of_month'):
+        dd = str(d.day_of_month).zfill(2)
+    elif hasattr(d, 'dayofmonth'):
+        dd = str(d.dayofmonth).zfill(2)
+    else:
+        error("No day-of-month attribute: %s" % d)
+    return "%s-%s-%s %s:%s:%s" % (yyyy, str(d.month).zfill(2), dd, str(d.hour).zfill(2), str(d.minute).zfill(2), str(d.second).zfill(2))
 
 # class to represent ISO files
 class FFM_IsoArchive(FFM_File):
     def __init__(self, path):
         super().__init__(path)
         self.children = None # initialize upon first `__iter__` call
+        self.iso = PyCdlib()
     def __iter__(self):
         if self.children is None:
+            self.iso.open_fp(BytesIO(self.get_data()))
             self.children = list()
-            iso = PyCdlib()
-            iso.open_fp(BytesIO(self.get_data()))
             iso_path_timestamp_data = list()
-            for dirname, dirlist, filelist in iso.walk(iso_path='/'):
+            for dirname, dirlist, filelist in self.iso.walk(iso_path='/'):
                 dirpath = Path(dirname)
-                iso_path_timestamp_data.append((dirpath, parse_pycdlib_date(iso.get_record(iso_path=dirname).date), None))
+                iso_path_timestamp_data.append((dirpath, parse_pycdlib_date(self.iso.get_record(iso_path=dirname).date), None))
                 for fn in filelist:
                     iso_path = dirpath / fn
                     curr_data = BytesIO()
-                    iso.get_file_from_iso_fp(curr_data, iso_path=str(iso_path))
-                    iso_path_timestamp_data.append((iso_path, parse_pycdlib_date(iso.get_record(iso_path=str(iso_path)).date), curr_data.getvalue()))
-            iso.close()
+                    self.iso.get_file_from_iso_fp(curr_data, iso_path=str(iso_path))
+                    iso_path_timestamp_data.append((iso_path, parse_pycdlib_date(self.iso.get_record(iso_path=str(iso_path)).date), curr_data.getvalue()))
             iso_path_timestamp_data.sort()
             iso_path_to_obj = dict()
             for iso_path, iso_timestamp, iso_data in iso_path_timestamp_data:
@@ -188,6 +199,20 @@ class FFM_IsoArchive(FFM_File):
         out = super().to_dict() | {
             'children': [child.to_dict() for child in self],
         }
+        # add pycdlib PVD attributes: https://github.com/clalancette/pycdlib/blob/67fe5ea7f68cf1185379c2c5e8acf37d483a2d4a/pycdlib/headervd.py#L47-L60
+        for k in dir(self.iso.pvd):
+            if k.startswith('_'):
+                continue
+            v = getattr(self.iso.pvd, k)
+            if '_date' in k:
+                out[k] = parse_pycdlib_date(v)
+            elif isinstance(v, str):
+                out[k] = v
+            elif isinstance(v, bytes):
+                try:
+                    out[k] = v.decode()
+                except:
+                    out[k] = '0x' + v.hex()
         out['format'] = 'ISO'
         return out
 
