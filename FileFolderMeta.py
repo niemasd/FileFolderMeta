@@ -61,7 +61,7 @@ class Directory(OnDisk):
         self.contents = None # initialize upon first `__iter__` call
     def __iter__(self):
         if self.contents is None:
-            self.contents = [get_obj(p) for p in self.path.glob('*')]
+            self.contents = sorted((get_obj(p) for p in self.path.glob('*')), key=lambda x: x.path)
         return iter(self.contents)
     def to_dict(self):
         return super().to_dict() | {
