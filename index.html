@@ -319,31 +319,6 @@
       }
     }
 
-    function summarizeFile(node) {
-      // A lightweight, generic summary without assuming any specific extra keys.
-      const name = getName(node);
-      const format = getFormat(node);
-      const keys = isObject(node) ? Object.keys(node) : [];
-      const extraKeys = keys.filter(k => !["name", "format", "children"].includes(k));
-
-      const lines = [];
-      lines.push(`Name: ${name}`);
-      if (format) lines.push(`Format: ${format}`);
-      lines.push(`Type: File`);
-      lines.push(`Attributes: ${extraKeys.length} extra key(s)`);
-
-      // If common size-ish keys exist, show them in the summary.
-      const common = ["size", "bytes", "byteSize", "length", "sha256", "md5", "mime", "mimetype", "path", "modified", "created"];
-      const found = common.filter(k => isObject(node) && Object.prototype.hasOwnProperty.call(node, k));
-      if (found.length) {
-        lines.push("");
-        lines.push("Notable fields:");
-        for (const k of found) lines.push(`- ${k}: ${safeStringify(node[k])}`);
-      }
-
-      return lines.join("\n");
-    }
-
     function nodeBadge(node) {
       if (isFolderLike(node)) {
         const n = Array.isArray(node.children) ? node.children.length : 0;
@@ -564,20 +539,11 @@
       const p = document.createElement("p");
       if (isFolder) {
         const n = Array.isArray(node.children) ? node.children.length : 0;
-        p.textContent = `Folder-like node (has "children"). Contains ${n} item(s).`;
+        p.textContent = `Folder-like object containing ${n} item(s).`;
       } else {
-        p.textContent = `File node. ${format ? `Format: ${format}.` : "No format provided."}`;
+        p.textContent = `File-like object.`;
       }
       header.appendChild(p);
-
-      const preSummary = document.createElement("div");
-      if (!isFolder && opts.mode === "file") {
-        const summary = summarizeFile(node);
-        preSummary.innerHTML = `
-          <div style="margin:10px 0 0 0; font-size:12px; color:var(--muted);">Summary</div>
-          <div style="white-space:pre-wrap; border:1px solid var(--line); background:var(--panel2); padding:10px; border-radius:12px; margin-top:6px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size:12px;">${escapeHtml(summary)}</div>
-        `;
-      }
 
       // Key/value grid of extra attributes (and core fields)
       const kv = document.createElement("div");
@@ -615,7 +581,6 @@
 
       detailsEl.innerHTML = "";
       detailsEl.appendChild(header);
-      if (preSummary.childNodes.length) detailsEl.appendChild(preSummary);
       detailsEl.appendChild(kv);
     }
 
