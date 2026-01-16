@@ -519,7 +519,7 @@
 
     function renderDetails(node, opts = {}) {
       if (!node || node.__virtualRoot) {
-        detailsEl.innerHTML = `<div class="emptyState">Select a folder or file.</div>`;
+        detailsEl.innerHTML = `<div class="emptyState">Select a folder or file</div>`;
         exportBtn.disabled = true;
         return;
       }
@@ -537,11 +537,10 @@
       header.appendChild(h2);
 
       const p = document.createElement("p");
+      p.textContent = `${format} object`
       if (isFolder) {
         const n = Array.isArray(node.children) ? node.children.length : 0;
-        p.textContent = `Folder-like object containing ${n} item(s).`;
-      } else {
-        p.textContent = `File-like object.`;
+        p.textContent += ` containing ${n} item(s)`;
       }
       header.appendChild(p);
 
