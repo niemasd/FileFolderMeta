@@ -553,9 +553,6 @@
       // Core fields
       rows.push(["name", name]);
       if (format) rows.push(["format", format]);
-      rows.push(["type", isFolder ? "folder-like" : "file"]);
-
-      if (isFolder) rows.push(["children_count", Array.isArray(node.children) ? node.children.length : 0]);
 
       // Extra attributes
       if (isObject(node)) {
