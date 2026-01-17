@@ -410,6 +410,15 @@
       return [];
     }
 
+    function formatBytes(bytes, decimals = 2) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const dm = decimals < 0 ? 0 : decimals;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+
     function renderList() {
       listEl.innerHTML = "";
       if (!root) return;
@@ -472,20 +481,37 @@
         const meta = document.createElement("div");
         meta.className = "meta";
 
+        // Add chips to entries
+        /*
         const b = nodeBadge(node);
         const chip = document.createElement("span");
         chip.className = `chip ${b.cls || ""}`.trim();
         chip.textContent = b.label;
-        meta.appendChild(chip);
-
-        // Count extra attributes
+        meta.appendChild(chip);*/
         if (isObject(node)) {
+          // "number of children" chip
+          if('children' in node) {
+            const chipChildren = document.createElement("span");
+            chipChildren.className = "chip";
+            chipChildren.textContent = `children: ${node.children.length}`;
+            meta.appendChild(chipChildren);
+          }
+
+          // "file size" chip
+          if('size' in node) {
+            const chipSize = document.createElement("span");
+            chipSize.className = "chip";
+            chipSize.textContent = `size: ${formatBytes(node.size)}`;
+            meta.appendChild(chipSize);
+          }
+
+          // "number of attributes" chip
           const extra = Object.keys(node).filter(k => !["name", "format", "children"].includes(k));
           if (extra.length) {
-            const chip2 = document.createElement("span");
-            chip2.className = "chip";
-            chip2.textContent = `attrs: ${extra.length}`;
-            meta.appendChild(chip2);
+            const chipAttrs = document.createElement("span");
+            chipAttrs.className = "chip";
+            chipAttrs.textContent = `attrs: ${extra.length}`;
+            meta.appendChild(chipAttrs);
           }
         }
 
