@@ -15,7 +15,7 @@ from zlib import crc32
 import argparse
 
 # useful constants
-VERSION = '0.0.3'
+VERSION = '0.0.4'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 
 # hash functionto calculate
@@ -173,7 +173,10 @@ class FFM_IsoArchive(FFM_File):
             'children': [child.to_dict() for child in self],
         }
         # add IsoFS attributes
-        out['sector_size'] = self.iso.get_sector_size()
+        out['physical_logical_block_size'] = self.iso.get_physical_logical_block_size()
+        out['user_data_offset'] = self.iso.get_user_data_offset()
+        out['user_data_size'] = self.iso.get_user_data_size()
+        out['logical_block_size'] = self.iso.get_logical_block_size()
         for k, v in self.iso.parse_primary_volume_descriptor().items():
             if k.endswith('_identifier'):
                 out[k] = v

@@ -1,1 +1,1 @@
-niemafs>=0.0.4
+niemafs>=0.0.6
