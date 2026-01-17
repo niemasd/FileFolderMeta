@@ -110,11 +110,14 @@ class FFM_ZipArchive(FFM_File):
     def __init__(self, path):
         super().__init__(path)
         self.children = None # initialize upon first `__iter__` call
+        self.zip = None
     def __iter__(self):
         if self.children is None:
+            if self.zip is None:
+                self.zip = ZipFS(BytesIO(self.get_data()), 'r')
             self.children = list()
             zip_path_to_obj = dict()
-            for zip_path, zip_timestamp, zip_data in ZipFS(BytesIO(self.get_data()), 'r'):
+            for zip_path, zip_timestamp, zip_data in self.zip:
                 if zip_data is None:
                     obj = FFM_Directory(zip_path)
                 else:
@@ -137,88 +140,57 @@ class FFM_ZipArchive(FFM_File):
         out['format'] = 'ZIP'
         return out
 
-# parse "YYYY-MM-DD HH:MM:SS" timestamp from `pycdlib.date.DirectoryRecordDate` object
-def parse_pycdlib_date(d):
-    if hasattr(d, 'year'):
-        yyyy = d.year
-    elif hasattr(d, 'years_since_1900'):
-        yyyy = d.years_since_1900 + 1900
-    else:
-        error("No year attribute: %s" % d)
-    if hasattr(d, 'day_of_month'):
-        dd = str(d.day_of_month).zfill(2)
-    elif hasattr(d, 'dayofmonth'):
-        dd = str(d.dayofmonth).zfill(2)
-    else:
-        error("No day-of-month attribute: %s" % d)
-    return "%s-%s-%s %s:%s:%s" % (yyyy, str(d.month).zfill(2), dd, str(d.hour).zfill(2), str(d.minute).zfill(2), str(d.second).zfill(2))
-
 # class to represent ISO files
 class FFM_IsoArchive(FFM_File):
     def __init__(self, path):
         super().__init__(path)
         self.children = None # initialize upon first `__iter__` call
-        self.iso = PyCdlib()
+        self.iso = None
     def __iter__(self):
         if self.children is None:
-            self.iso.open_fp(BytesIO(self.get_data()))
+            if self.iso is None:
+                self.iso = IsoFS(BytesIO(self.get_data()), 'r')
             self.children = list()
-            iso_path_timestamp_data = list()
-            for dirname, dirlist, filelist in self.iso.walk(iso_path='/'):
-                dirpath = Path(dirname)
-                iso_path_timestamp_data.append((dirpath, parse_pycdlib_date(self.iso.get_record(iso_path=dirname).date), None))
-                for fn in filelist:
-                    iso_path = dirpath / fn
-                    curr_data = BytesIO()
-                    self.iso.get_file_from_iso_fp(curr_data, iso_path=str(iso_path))
-                    iso_path_timestamp_data.append((iso_path, parse_pycdlib_date(self.iso.get_record(iso_path=str(iso_path)).date), curr_data.getvalue()))
-            iso_path_timestamp_data.sort()
             iso_path_to_obj = dict()
-            for iso_path, iso_timestamp, iso_data in iso_path_timestamp_data:
-                if str(iso_path) == '/':
-                    continue
+            for iso_path, iso_timestamp, iso_data in self.iso:
                 if iso_data is None:
                     obj = FFM_Directory(iso_path)
                 else:
                     obj = get_obj(iso_path)
                     obj.data = iso_data
-                    obj.timestamp = iso_timestamp
-                if str(iso_path).count('/') == 1:
-                    self.children.append(obj)
-                else:
+                    obj.timestamp = iso_timestamp.strftime(TIMESTAMP_FORMAT_STRING)
+                if '/' in str(iso_path):
                     parent_obj = iso_path_to_obj[iso_path.parent]
                     if parent_obj.children is None:
                         parent_obj.children = list()
                     parent_obj.children.append(obj)
+                else:
+                    self.children.append(obj)
                 iso_path_to_obj[iso_path] = obj
         return iter(self.children)
     def to_dict(self):
         out = super().to_dict() | {
             'children': [child.to_dict() for child in self],
         }
-        # add pycdlib PVD attributes: https://github.com/clalancette/pycdlib/blob/67fe5ea7f68cf1185379c2c5e8acf37d483a2d4a/pycdlib/headervd.py#L47-L60
-        for k in dir(self.iso.pvd):
-            if k.startswith('_'):
-                continue
-            v = getattr(self.iso.pvd, k)
-            if '_date' in k:
-                out[k] = parse_pycdlib_date(v)
-            elif isinstance(v, str):
+        # add IsoFS PVD attributes: https://github.com/niemasd/NiemaFS/blob/5008870e552f3379a5ca747df79b178e68bfee94/niemafs/iso.py#L289-L328
+        for k, v in self.iso.parse_primary_volume_descriptor().items():
+            if k.endswith('_identifier'):
                 out[k] = v
-            elif isinstance(v, bytes):
+            elif k.endswith('_datetime'):
                 try:
-                    out[k] = v.decode()
+                    out[k] = v.strftime(TIMESTAMP_FORMAT_STRING)
                 except:
-                    out[k] = '0x' + v.hex()
+                    out[k] = str(v)
         out['format'] = 'ISO'
         return out
 
 # map file formats to classes
 INPUT_FORMAT_TO_CLASS = {
-    'DIR': FFM_Directory,
+    'BIN':  FFM_IsoArchive,
+    'DIR':  FFM_Directory,
     'FILE': FFM_File,
-    'ISO': FFM_IsoArchive,
-    'ZIP': FFM_ZipArchive,
+    'ISO':  FFM_IsoArchive,
+    'ZIP':  FFM_ZipArchive,
 }
 
 # try to return the appropriate directory/file object from a given path
@@ -230,9 +202,13 @@ def get_obj(path):
     # try to infer class from file extension as last resort
     ext = path.suffix.strip().lstrip('.').upper()
     if ext in INPUT_FORMAT_TO_CLASS:
-        return INPUT_FORMAT_TO_CLASS[ext](path)
-    else:
-        return FFM_File(path)
+        try:
+            tmp = INPUT_FORMAT_TO_CLASS[ext](path)
+            list(tmp) # trigger actually setting up object
+            return tmp
+        except:
+            pass # if fails (e.g. BIN is just a binary file, not ISO), just default to FFM_File
+    return FFM_File(path)
 INPUT_FORMAT_TO_CLASS['AUTO'] = get_obj
 
 # parse user args

@@ -1,8 +1,13 @@
 # example files
+*.BIN
 *.bin
+*.CUE
 *.cue
+*.ISO
 *.iso
+*.ZIP
 *.zip
+TEST/
 test/
 
 # Byte-compiled / optimized / DLL files
