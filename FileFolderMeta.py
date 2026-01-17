@@ -219,8 +219,8 @@ INPUT_FORMAT_TO_CLASS['AUTO'] = get_obj
 def parse_args():
     # use argparse to parse user arguments
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-i', '--input', required=True, type=str, help="Input FFM_File/Folder")
-    parser.add_argument('-o', '--output', required=False, type=str, default='stdout', help="Output JSON FFM_File")
+    parser.add_argument('-i', '--input', required=True, type=str, help="Input File/Folder")
+    parser.add_argument('-o', '--output', required=False, type=str, default='stdout', help="Output JSON File")
     parser.add_argument('-oi', '--output_indent', required=False, type=int, default=None, help="Number of of Spaces per Indent in Output JSON")
     parser.add_argument('-os', '--output_sort', action='store_true', help="Sort Keys in Output JSON Alphabetically")
     args = parser.parse_args()
