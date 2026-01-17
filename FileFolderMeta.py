@@ -11,12 +11,11 @@ from io import BytesIO
 from json import dump as jdump
 from pathlib import Path
 from sys import stderr
-from zipfile import ZipFile
 from zlib import crc32
 import argparse
 
 # useful constants
-VERSION = '0.0.1'
+VERSION = '0.0.2'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 
 # hash functionto calculate
@@ -41,9 +40,9 @@ def error(s, exitcode=1, file=stderr):
 
 # non-standard imports
 try:
-    from pycdlib import PyCdlib
+    from niemafs import IsoFS, ZipFS
 except:
-    error("Unable to import 'pycdlib'. Install with: pip install pycdlib")
+    error("Unable to import 'niemafs'. Install with: pip install niemafs")
 
 # class to represent the most generalized of entities (superclass of all other classes)
 class FFM_Entity:
@@ -114,16 +113,14 @@ class FFM_ZipArchive(FFM_File):
     def __iter__(self):
         if self.children is None:
             self.children = list()
-            with ZipFile(BytesIO(self.get_data()), 'r') as zip_obj:
-                zip_path_entry_data = sorted((Path(zip_entry.filename), zip_entry, None if zip_entry.is_dir() else zip_obj.read(zip_entry.filename)) for zip_entry in zip_obj.infolist())
             zip_path_to_obj = dict()
-            for zip_path, zip_entry, zip_data in zip_path_entry_data:
+            for zip_path, zip_timestamp, zip_data in ZipFS(BytesIO(self.get_data()), 'r'):
                 if zip_data is None:
                     obj = FFM_Directory(zip_path)
                 else:
                     obj = get_obj(zip_path)
                     obj.data = zip_data
-                    obj.timestamp = datetime(*zip_entry.date_time).strftime(TIMESTAMP_FORMAT_STRING)
+                    obj.timestamp = zip_timestamp.strftime(TIMESTAMP_FORMAT_STRING)
                 if '/' in str(zip_path):
                     parent_obj = zip_path_to_obj[zip_path.parent]
                     if parent_obj.children is None:
