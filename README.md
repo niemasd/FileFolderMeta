@@ -1,6 +1,9 @@
 # FileFolderMeta
 Calculate metadata from file(s) / folder(s) nested within a given path
 
+## Installation
+FileFolderMeta is written in Python and depends on the [NiemaFS](https://github.com/niemasd/NiemaFS) Python package. You can simply download [`FileFolderMeta.py`](FileFolderMeta.py) to your machine and run it.
+
 ## Usage
 
 You can run the [`FileFolderMeta.py`](FileFolderMeta.py) script to produce a JSON file containing metadata about file(s) and folder(s) nested within a given path:
