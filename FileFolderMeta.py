@@ -15,7 +15,7 @@ from zlib import crc32
 import argparse
 
 # useful constants
-VERSION = '0.0.2'
+VERSION = '0.0.3'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 
 # hash functionto calculate
@@ -172,7 +172,8 @@ class FFM_IsoArchive(FFM_File):
         out = super().to_dict() | {
             'children': [child.to_dict() for child in self],
         }
-        # add IsoFS PVD attributes: https://github.com/niemasd/NiemaFS/blob/5008870e552f3379a5ca747df79b178e68bfee94/niemafs/iso.py#L289-L328
+        # add IsoFS attributes
+        out['sector_size'] = self.iso.get_sector_size()
         for k, v in self.iso.parse_primary_volume_descriptor().items():
             if k.endswith('_identifier'):
                 out[k] = v
