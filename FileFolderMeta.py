@@ -15,7 +15,7 @@ from zlib import crc32
 import argparse
 
 # useful constants
-VERSION = '0.0.4'
+VERSION = '0.0.5'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 
 # hash functionto calculate
@@ -40,14 +40,15 @@ def error(s, exitcode=1, file=stderr):
 
 # non-standard imports
 try:
-    from niemafs import IsoFS, ZipFS
+    from niemafs import GcmFS, IsoFS, ZipFS
 except:
     error("Unable to import 'niemafs'. Install with: pip install niemafs")
 
 # class to represent the most generalized of entities (superclass of all other classes)
 class FFM_Entity:
-    def __init__(self, name):
+    def __init__(self, name, data=None):
         self.name = name
+        self.data = data # initialize upon first `get_data` call if `None`
     def to_dict(self):
         return {
             'name': self.name,
@@ -55,8 +56,8 @@ class FFM_Entity:
 
 # class to represent files and directories on disk
 class FFM_OnDisk(FFM_Entity):
-    def __init__(self, path):
-        super().__init__(path.name)
+    def __init__(self, path, data=None):
+        super().__init__(name=path.name, data=data)
         self.path = path
     def to_dict(self):
         return super().to_dict()
@@ -64,7 +65,7 @@ class FFM_OnDisk(FFM_Entity):
 # class to represent directories
 class FFM_Directory(FFM_OnDisk):
     def __init__(self, path):
-        super().__init__(path)
+        super().__init__(path=path, data=None)
         self.children = None # initialize upon first `__iter__` call
     def __iter__(self):
         if self.children is None:
@@ -78,9 +79,8 @@ class FFM_Directory(FFM_OnDisk):
 
 # class to represent arbitrary files (last resort if type-specific class doesn't exist)
 class FFM_File(FFM_OnDisk):
-    def __init__(self, path):
-        super().__init__(path)
-        self.data = None # initialize upon first `get_data` call
+    def __init__(self, path, data=None):
+        super().__init__(path=path, data=data)
         self.stat_result = None # initialize upon first `stat` call
         self.timestamp = None # initialize upon first `get_timestamp` call
     def get_data(self):
@@ -95,20 +95,47 @@ class FFM_File(FFM_OnDisk):
             self.stat_result = self.path.stat()
         return self.stat_result
     def get_timestamp(self):
+        if self.timestamp == '': # '' denotes an intentional blank timestamp (e.g. file systems that don't have timestamps)
+            return None
         if self.timestamp is None:
             self.timestamp = datetime.fromtimestamp(self.stat().st_mtime).astimezone().strftime(TIMESTAMP_FORMAT_STRING)
         return self.timestamp
     def to_dict(self):
-        return super().to_dict() | {
+        out = super().to_dict() | {
             'format': 'FILE',
             'size': self.get_size(),
-            'date': self.get_timestamp(),
         } | {k:HASH_FUNCTIONS[k](self.get_data()) for k in sorted(HASH_FUNCTIONS.keys())}
+        timestamp = self.get_timestamp()
+        if timestamp != '':
+            out['date'] = timestamp
+        return out
+
+# parse descendants in a NiemaFS-based class
+def parse_descendants_niemafs(ffm_obj, niemafs_obj):
+    fs_path_to_obj = dict()
+    for curr_path, curr_timestamp, curr_data in niemafs_obj:
+        if curr_data is None:
+            obj = FFM_Directory(curr_path)
+        else:
+            obj = get_obj(path=curr_path, data=curr_data)
+            obj.data = curr_data
+            if curr_timestamp is None:
+                obj.timestamp = ''
+            else:
+                obj.timestamp = curr_timestamp.strftime(TIMESTAMP_FORMAT_STRING)
+        if '/' in str(curr_path):
+            parent_obj = fs_path_to_obj[curr_path.parent]
+            if parent_obj.children is None:
+                parent_obj.children = list()
+            parent_obj.children.append(obj)
+        else:
+            ffm_obj.children.append(obj)
+        fs_path_to_obj[curr_path] = obj
 
 # class to represent ZIP files
 class FFM_ZipArchive(FFM_File):
-    def __init__(self, path):
-        super().__init__(path)
+    def __init__(self, path, data=None):
+        super().__init__(path=path, data=data)
         self.children = None # initialize upon first `__iter__` call
         self.zip = None
     def __iter__(self):
@@ -116,22 +143,7 @@ class FFM_ZipArchive(FFM_File):
             if self.zip is None:
                 self.zip = ZipFS(BytesIO(self.get_data()), 'r')
             self.children = list()
-            zip_path_to_obj = dict()
-            for zip_path, zip_timestamp, zip_data in self.zip:
-                if zip_data is None:
-                    obj = FFM_Directory(zip_path)
-                else:
-                    obj = get_obj(zip_path)
-                    obj.data = zip_data
-                    obj.timestamp = zip_timestamp.strftime(TIMESTAMP_FORMAT_STRING)
-                if '/' in str(zip_path):
-                    parent_obj = zip_path_to_obj[zip_path.parent]
-                    if parent_obj.children is None:
-                        parent_obj.children = list()
-                    parent_obj.children.append(obj)
-                else:
-                    self.children.append(obj)
-                zip_path_to_obj[zip_path] = obj
+            parse_descendants_niemafs(self, self.zip)
         return iter(self.children)
     def to_dict(self):
         out = super().to_dict() | {
@@ -142,8 +154,8 @@ class FFM_ZipArchive(FFM_File):
 
 # class to represent ISO files
 class FFM_IsoArchive(FFM_File):
-    def __init__(self, path):
-        super().__init__(path)
+    def __init__(self, path, data=None):
+        super().__init__(path=path, data=data)
         self.children = None # initialize upon first `__iter__` call
         self.iso = None
     def __iter__(self):
@@ -151,22 +163,7 @@ class FFM_IsoArchive(FFM_File):
             if self.iso is None:
                 self.iso = IsoFS(BytesIO(self.get_data()), 'r')
             self.children = list()
-            iso_path_to_obj = dict()
-            for iso_path, iso_timestamp, iso_data in self.iso:
-                if iso_data is None:
-                    obj = FFM_Directory(iso_path)
-                else:
-                    obj = get_obj(iso_path)
-                    obj.data = iso_data
-                    obj.timestamp = iso_timestamp.strftime(TIMESTAMP_FORMAT_STRING)
-                if '/' in str(iso_path):
-                    parent_obj = iso_path_to_obj[iso_path.parent]
-                    if parent_obj.children is None:
-                        parent_obj.children = list()
-                    parent_obj.children.append(obj)
-                else:
-                    self.children.append(obj)
-                iso_path_to_obj[iso_path] = obj
+            parse_descendants_niemafs(self, self.iso)
         return iter(self.children)
     def to_dict(self):
         out = super().to_dict() | {
@@ -188,17 +185,42 @@ class FFM_IsoArchive(FFM_File):
         out['format'] = 'ISO'
         return out
 
+# class to represent GameCube GCM files
+class FFM_GcmArchive(FFM_File):
+    def __init__(self, path, data=None):
+        super().__init__(path=path, data=data)
+        self.children = None # initialize upon first `__iter__` call
+        self.gcm = None
+    def __iter__(self):
+        if self.children is None:
+            if self.gcm is None:
+                self.gcm = GcmFS(BytesIO(self.get_data()), 'r')
+            self.children = list()
+            parse_descendants_niemafs(self, self.gcm)
+        return iter(self.children)
+    def to_dict(self):
+        out = super().to_dict() | {
+            'children': [child.to_dict() for child in self],
+        }
+        # add GcmFS attributes
+        gcm_boot_bin = self.gcm.parse_boot_bin()
+        for k in ['game_code', 'maker_code', 'disk_id', 'version', 'game_name']:
+            out[k] = gcm_boot_bin[k]
+        out['format'] = 'GCM'
+        return out
+
 # map file formats to classes
 INPUT_FORMAT_TO_CLASS = {
     'BIN':  FFM_IsoArchive,
     'DIR':  FFM_Directory,
     'FILE': FFM_File,
+    'GCM':  FFM_GcmArchive,
     'ISO':  FFM_IsoArchive,
     'ZIP':  FFM_ZipArchive,
 }
 
 # try to return the appropriate directory/file object from a given path
-def get_obj(path):
+def get_obj(path, data=None):
     # input path is a directory
     if path.is_dir():
         return FFM_Directory(path)
@@ -207,12 +229,13 @@ def get_obj(path):
     ext = path.suffix.strip().lstrip('.').upper()
     if ext in INPUT_FORMAT_TO_CLASS:
         try:
-            tmp = INPUT_FORMAT_TO_CLASS[ext](path)
+            tmp = INPUT_FORMAT_TO_CLASS[ext](path, data=data)
             list(tmp) # trigger actually setting up object
             return tmp
-        except:
+        except Exception as e:
+            raise e
             pass # if fails (e.g. BIN is just a binary file, not ISO), just default to FFM_File
-    return FFM_File(path)
+    return FFM_File(path, data=data)
 INPUT_FORMAT_TO_CLASS['AUTO'] = get_obj
 
 # parse user args
