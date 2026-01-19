@@ -15,7 +15,7 @@ from zlib import crc32
 import argparse
 
 # useful constants
-VERSION = '0.0.5'
+VERSION = '0.0.6'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 
 # hash functionto calculate
@@ -185,7 +185,7 @@ class FFM_IsoArchive(FFM_File):
         out['format'] = 'ISO'
         return out
 
-# class to represent GameCube GCM files
+# class to represent GameCube mini-DVDs
 class FFM_GcmArchive(FFM_File):
     def __init__(self, path, data=None):
         super().__init__(path=path, data=data)
@@ -209,6 +209,30 @@ class FFM_GcmArchive(FFM_File):
         out['format'] = 'GCM'
         return out
 
+# class to represent Wii DVDs
+class FFM_WiiArchive(FFM_File):
+    def __init__(self, path, data=None):
+        super().__init__(path=path, data=data)
+        self.children = None # initialize upon first `__iter__` call
+        self.wii = None
+    def __iter__(self):
+        if self.children is None:
+            if self.wii is None:
+                self.wii = WiiFS(BytesIO(self.get_data()), 'r')
+            self.children = list()
+            parse_descendants_niemafs(self, self.wii)
+        return iter(self.children)
+    def to_dict(self):
+        out = super().to_dict() | {
+            'children': [child.to_dict() for child in self],
+        }
+        # add WiiFS attributes
+        wii_header = self.wii.parse_header()
+        for k in ['game_code', 'maker_code', 'disk_id', 'version', 'game_name']:
+            out[k] = wii_header[k]
+        out['format'] = 'WII'
+        return out
+
 # map file formats to classes
 INPUT_FORMAT_TO_CLASS = {
     'BIN':  FFM_IsoArchive,
@@ -216,6 +240,7 @@ INPUT_FORMAT_TO_CLASS = {
     'FILE': FFM_File,
     'GCM':  FFM_GcmArchive,
     'ISO':  FFM_IsoArchive,
+    'WII':  FFM_WiiArchive,
     'ZIP':  FFM_ZipArchive,
 }
 
@@ -243,6 +268,7 @@ def parse_args():
     # use argparse to parse user arguments
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-i', '--input', required=True, type=str, help="Input File/Folder")
+    parser.add_argument('-if', '--input_format', required=False, type=str, default='AUTO', help="Input File Format (options: %s)" % ', '.join(sorted(INPUT_FORMAT_TO_CLASS.keys())))
     parser.add_argument('-o', '--output', required=False, type=str, default='stdout', help="Output JSON File")
     parser.add_argument('-oi', '--output_indent', required=False, type=int, default=None, help="Number of of Spaces per Indent in Output JSON")
     parser.add_argument('-os', '--output_sort', action='store_true', help="Sort Keys in Output JSON Alphabetically")
@@ -252,6 +278,9 @@ def parse_args():
     args.input = Path(args.input)
     if not args.input.exists():
         error("Input not found: %s" % args.input)
+    args.input_format = args.input_format.strip().upper()
+    if args.input_format not in INPUT_FORMAT_TO_CLASS:
+        raise ValueError("Invalid input format (%s). Options: %s" % (args.input_format, ', '.join(sorted(INPUT_FORMAT_TO_CLASS.keys()))))
     if args.output != 'stdout':
         args.output = Path(args.output)
         if args.output.exists():
@@ -265,7 +294,12 @@ def main():
     # load input
     args = parse_args()
     print_log("Loading Input: %s" % args.input)
-    root = get_obj(args.input)
+    if args.input_format == 'AUTO':
+        print_log("Attempting to automatically infer input format...")
+        root = get_obj(args.input)
+    else:
+        print_log("Using user-provided input format: %s" % args.input_format)
+        root = INPUT_FORMAT_TO_CLASS[args.input_format](args.input)
 
     # write output
     print_log("Writing Output: %s" % args.output)

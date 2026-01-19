@@ -26,6 +26,7 @@ Then, you can either open the JSON in your favorite JSON viewer / text editor, o
 ## Supported Formats
 * Binary Files
 * Directories
-* GCM GameCube Mini-DVD Images
 * ISO 9660 Disc Images (e.g. ISO, BIN)
+* Nintendo GameCube Mini-DVD Images
+* Nintendo Wii DVD Images
 * ZIP Archives
