@@ -15,7 +15,7 @@ from zlib import crc32
 import argparse
 
 # useful constants
-VERSION = '0.0.6'
+VERSION = '0.0.7'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 
 # hash functionto calculate
