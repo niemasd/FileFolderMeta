@@ -40,7 +40,7 @@ def error(s, exitcode=1, file=stderr):
 
 # non-standard imports
 try:
-    from niemafs import GcmFS, IsoFS, ZipFS
+    from niemafs import GcmFS, IsoFS, WiiFS, ZipFS
 except:
     error("Unable to import 'niemafs'. Install with: pip install niemafs")
 
@@ -257,8 +257,7 @@ def get_obj(path, data=None):
             tmp = INPUT_FORMAT_TO_CLASS[ext](path, data=data)
             list(tmp) # trigger actually setting up object
             return tmp
-        except Exception as e:
-            raise e
+        except:
             pass # if fails (e.g. BIN is just a binary file, not ISO), just default to FFM_File
     return FFM_File(path, data=data)
 INPUT_FORMAT_TO_CLASS['AUTO'] = get_obj
