@@ -10,6 +10,7 @@ from io import BytesIO
 from json import dump as jdump
 from pathlib import Path
 from sys import stderr
+from warnings import warn
 from zlib import crc32
 import argparse
 import gzip
@@ -42,16 +43,21 @@ def error(s, exitcode=1, file=stderr):
 
 # non-standard imports
 try:
-    from niemafs import GcmFS, IsoFS, TarFS, WiiFS, ZipFS
+    from niemafs import GcmFS, IsoFS, TarFS, ZipFS
 except:
     error("Unable to import 'niemafs'. Install with: pip install niemafs")
 FORMAT_TO_NIEMAFS = {
     'GCM': GcmFS,
     'ISO': IsoFS,
     'TAR': TarFS,
-    'WII': WiiFS,
     'ZIP': ZipFS,
 }
+try:
+    from niemafs import WiiFS
+    FORMAT_TO_NIEMAFS['WII'] = WiiFS
+except:
+    warn("Unable to import 'niemafs.WiiFS' (likely due to missing dependencies). Wii support disabled.")
+    WiiFS = None
 
 # clean a file extension
 def clean_ext(ext):
@@ -235,9 +241,10 @@ INPUT_FORMAT_TO_CLASS = {
     'GCM':  FFM_GcmArchive,
     'ISO':  FFM_IsoArchive,
     'TAR':  FFM_TarArchive,
-    'WII':  FFM_WiiArchive,
     'ZIP':  FFM_ZipArchive,
 }
+if WiiFS is not None:
+    INPUT_FORMAT_TO_CLASS['WII'] = FFM_WiiArchive
 
 # try to return the appropriate directory/file object from a given path
 def get_obj(path, data=None):
