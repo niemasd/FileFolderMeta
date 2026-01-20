@@ -13,11 +13,12 @@ from sys import stderr
 from zlib import crc32
 import argparse
 import gzip
+import lzma
 
 # useful constants
-VERSION = '0.0.9'
+VERSION = '0.0.10'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
-COMPRESSED_EXTENSIONS = {'GZ'}
+COMPRESSED_EXTENSIONS = {'GZ', 'XZ'}
 
 # hash functionto calculate
 HASH_FUNCTIONS = {
@@ -54,6 +55,8 @@ def decompress(path, data):
     ext = clean_ext(path.suffix)
     if ext == 'GZ':
         return gzip.decompress(data)
+    elif ext == 'XZ':
+        return lzma.decompress(data)
     else:
         return data
 
