@@ -15,7 +15,7 @@ from zlib import crc32
 import argparse
 
 # useful constants
-VERSION = '0.0.7'
+VERSION = '0.0.8'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 
 # hash functionto calculate
@@ -40,7 +40,7 @@ def error(s, exitcode=1, file=stderr):
 
 # non-standard imports
 try:
-    from niemafs import GcmFS, IsoFS, WiiFS, ZipFS
+    from niemafs import GcmFS, IsoFS, TarFS, WiiFS, ZipFS
 except:
     error("Unable to import 'niemafs'. Install with: pip install niemafs")
 
@@ -152,6 +152,26 @@ class FFM_ZipArchive(FFM_File):
         out['format'] = 'ZIP'
         return out
 
+# class to represent TAR files
+class FFM_TarArchive(FFM_File):
+    def __init__(self, path, data=None):
+        super().__init__(path=path, data=data)
+        self.children = None # initialize upon first `__iter__` call
+        self.tar = None
+    def __iter__(self):
+        if self.children is None:
+            if self.tar is None:
+                self.tar = TarFS(BytesIO(self.get_data()), 'r')
+            self.children = list()
+            parse_descendants_niemafs(self, self.tar)
+        return iter(self.children)
+    def to_dict(self):
+        out = super().to_dict() | {
+            'children': [child.to_dict() for child in self],
+        }
+        out['format'] = 'TAR'
+        return out
+
 # class to represent ISO files
 class FFM_IsoArchive(FFM_File):
     def __init__(self, path, data=None):
@@ -240,6 +260,7 @@ INPUT_FORMAT_TO_CLASS = {
     'FILE': FFM_File,
     'GCM':  FFM_GcmArchive,
     'ISO':  FFM_IsoArchive,
+    'TAR':  FFM_TarArchive,
     'WII':  FFM_WiiArchive,
     'ZIP':  FFM_ZipArchive,
 }
