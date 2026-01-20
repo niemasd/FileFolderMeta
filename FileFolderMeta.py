@@ -16,7 +16,7 @@ import gzip
 import lzma
 
 # useful constants
-VERSION = '0.0.10'
+VERSION = '0.0.11'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 COMPRESSED_EXTENSIONS = {'GZ', 'XZ'}
 
@@ -45,6 +45,13 @@ try:
     from niemafs import GcmFS, IsoFS, TarFS, WiiFS, ZipFS
 except:
     error("Unable to import 'niemafs'. Install with: pip install niemafs")
+FORMAT_TO_NIEMAFS = {
+    'GCM': GcmFS,
+    'ISO': IsoFS,
+    'TAR': TarFS,
+    'WII': WiiFS,
+    'ZIP': ZipFS,
+}
 
 # clean a file extension
 def clean_ext(ext):
@@ -66,9 +73,7 @@ class FFM_Entity:
         self.name = name
         self.data = data # initialize upon first `get_data` call if `None`
     def to_dict(self):
-        return {
-            'name': self.name,
-        }
+        return {'name': self.name}
 
 # class to represent files and directories on disk
 class FFM_OnDisk(FFM_Entity):
@@ -126,148 +131,101 @@ class FFM_File(FFM_OnDisk):
             out['date'] = timestamp
         return out
 
-# parse descendants in a NiemaFS-based class
-def parse_descendants_niemafs(ffm_obj, niemafs_obj):
-    fs_path_to_obj = dict()
-    for curr_path, curr_timestamp, curr_data in niemafs_obj:
-        if curr_data is None:
-            obj = FFM_Directory(curr_path)
-        else:
-            obj = get_obj(path=curr_path, data=curr_data)
-            obj.data = curr_data
-            if curr_timestamp is None:
-                obj.timestamp = ''
-            else:
-                obj.timestamp = curr_timestamp.strftime(TIMESTAMP_FORMAT_STRING)
-        if '/' in str(curr_path):
-            parent_obj = fs_path_to_obj[curr_path.parent]
-            if parent_obj.children is None:
-                parent_obj.children = list()
-            parent_obj.children.append(obj)
-        else:
-            ffm_obj.children.append(obj)
-        fs_path_to_obj[curr_path] = obj
+# class to represent NiemaFS-based classes
+class FFM_NiemaFS(FFM_File):
+    def __init__(self, fmt, path, data=None):
+        super().__init__(path=path, data=data)
+        self.children = None # initialize upon first `__iter__` call
+        self.format = fmt
+        self.fs = None
+
+    def __iter__(self):
+        if self.children is None:
+            if self.fs is None:
+                self.fs = FORMAT_TO_NIEMAFS[self.format](BytesIO(decompress(self.path, self.get_data())))
+            self.children = list()
+            fs_path_to_obj = dict()
+            for curr_path, curr_timestamp, curr_data in self.fs:
+                if curr_data is None:
+                    obj = FFM_Directory(curr_path)
+                else:
+                    obj = get_obj(path=curr_path, data=curr_data)
+                    obj.data = curr_data
+                    if curr_timestamp is None:
+                        obj.timestamp = ''
+                    else:
+                        obj.timestamp = curr_timestamp.strftime(TIMESTAMP_FORMAT_STRING)
+                if '/' in str(curr_path):
+                    parent_obj = fs_path_to_obj[curr_path.parent]
+                    if parent_obj.children is None:
+                        parent_obj.children = list()
+                    parent_obj.children.append(obj)
+                else:
+                    self.children.append(obj)
+                fs_path_to_obj[curr_path] = obj
+        return iter(self.children)
+
+    def to_dict(self):
+        # universal NiemaFS attributes
+        out = super().to_dict() | {
+            'children': [child.to_dict() for child in self],
+        }
+
+        # ISO-specific attributes
+        if self.format == 'ISO':
+            out['physical_logical_block_size'] = self.fs.get_physical_logical_block_size()
+            out['user_data_offset'] = self.fs.get_user_data_offset()
+            out['user_data_size'] = self.fs.get_user_data_size()
+            out['logical_block_size'] = self.fs.get_logical_block_size()
+            for k, v in self.fs.parse_primary_volume_descriptor().items():
+                if k.endswith('_identifier'):
+                    out[k] = v
+                elif k.endswith('_datetime'):
+                    try:
+                        out[k] = v.strftime(TIMESTAMP_FORMAT_STRING)
+                    except:
+                        out[k] = str(v)
+
+        # GameCube-specific attributes
+        elif self.format == 'GCM':
+            gcm_boot_bin = self.fs.parse_boot_bin()
+            for k in ['game_code', 'maker_code', 'disk_id', 'version', 'game_name']:
+                out[k] = gcm_boot_bin[k]
+
+        # Wii-specific attributes
+        elif self.format == 'WII':
+            wii_header = self.fs.parse_header()
+            for k in ['game_code', 'maker_code', 'disk_id', 'version', 'game_name']:
+                out[k] = wii_header[k]
+
+        # finish up
+        out['format'] = self.format
+        return out
 
 # class to represent ZIP files
-class FFM_ZipArchive(FFM_File):
+class FFM_ZipArchive(FFM_NiemaFS):
     def __init__(self, path, data=None):
-        super().__init__(path=path, data=data)
-        self.children = None # initialize upon first `__iter__` call
-        self.zip = None
-    def __iter__(self):
-        if self.children is None:
-            if self.zip is None:
-                self.zip = ZipFS(BytesIO(decompress(self.path, self.get_data())))
-            self.children = list()
-            parse_descendants_niemafs(self, self.zip)
-        return iter(self.children)
-    def to_dict(self):
-        out = super().to_dict() | {
-            'children': [child.to_dict() for child in self],
-        }
-        out['format'] = 'ZIP'
-        return out
+        super().__init__(fmt='ZIP', path=path, data=data)
 
 # class to represent TAR files
-class FFM_TarArchive(FFM_File):
+class FFM_TarArchive(FFM_NiemaFS):
     def __init__(self, path, data=None):
-        super().__init__(path=path, data=data)
-        self.children = None # initialize upon first `__iter__` call
-        self.tar = None
-    def __iter__(self):
-        if self.children is None:
-            if self.tar is None:
-                self.tar = TarFS(BytesIO(decompress(self.path, self.get_data())))
-            self.children = list()
-            parse_descendants_niemafs(self, self.tar)
-        return iter(self.children)
-    def to_dict(self):
-        out = super().to_dict() | {
-            'children': [child.to_dict() for child in self],
-        }
-        out['format'] = 'TAR'
-        return out
+        super().__init__(fmt='TAR', path=path, data=data)
 
 # class to represent ISO files
-class FFM_IsoArchive(FFM_File):
+class FFM_IsoArchive(FFM_NiemaFS):
     def __init__(self, path, data=None):
-        super().__init__(path=path, data=data)
-        self.children = None # initialize upon first `__iter__` call
-        self.iso = None
-    def __iter__(self):
-        if self.children is None:
-            if self.iso is None:
-                self.iso = IsoFS(BytesIO(decompress(self.path, self.get_data())))
-            self.children = list()
-            parse_descendants_niemafs(self, self.iso)
-        return iter(self.children)
-    def to_dict(self):
-        out = super().to_dict() | {
-            'children': [child.to_dict() for child in self],
-        }
-        # add IsoFS attributes
-        out['physical_logical_block_size'] = self.iso.get_physical_logical_block_size()
-        out['user_data_offset'] = self.iso.get_user_data_offset()
-        out['user_data_size'] = self.iso.get_user_data_size()
-        out['logical_block_size'] = self.iso.get_logical_block_size()
-        for k, v in self.iso.parse_primary_volume_descriptor().items():
-            if k.endswith('_identifier'):
-                out[k] = v
-            elif k.endswith('_datetime'):
-                try:
-                    out[k] = v.strftime(TIMESTAMP_FORMAT_STRING)
-                except:
-                    out[k] = str(v)
-        out['format'] = 'ISO'
-        return out
+        super().__init__(fmt='ISO', path=path, data=data)
 
 # class to represent GameCube mini-DVDs
-class FFM_GcmArchive(FFM_File):
+class FFM_GcmArchive(FFM_NiemaFS):
     def __init__(self, path, data=None):
-        super().__init__(path=path, data=data)
-        self.children = None # initialize upon first `__iter__` call
-        self.gcm = None
-    def __iter__(self):
-        if self.children is None:
-            if self.gcm is None:
-                self.gcm = GcmFS(BytesIO(decompress(self.path, self.get_data())))
-            self.children = list()
-            parse_descendants_niemafs(self, self.gcm)
-        return iter(self.children)
-    def to_dict(self):
-        out = super().to_dict() | {
-            'children': [child.to_dict() for child in self],
-        }
-        # add GcmFS attributes
-        gcm_boot_bin = self.gcm.parse_boot_bin()
-        for k in ['game_code', 'maker_code', 'disk_id', 'version', 'game_name']:
-            out[k] = gcm_boot_bin[k]
-        out['format'] = 'GCM'
-        return out
+        super().__init__(fmt='GCM', path=path, data=data)
 
 # class to represent Wii DVDs
-class FFM_WiiArchive(FFM_File):
+class FFM_WiiArchive(FFM_NiemaFS):
     def __init__(self, path, data=None):
-        super().__init__(path=path, data=data)
-        self.children = None # initialize upon first `__iter__` call
-        self.wii = None
-    def __iter__(self):
-        if self.children is None:
-            if self.wii is None:
-                self.wii = WiiFS(BytesIO(decompress(self.path, self.get_data())))
-            self.children = list()
-            parse_descendants_niemafs(self, self.wii)
-        return iter(self.children)
-    def to_dict(self):
-        out = super().to_dict() | {
-            'children': [child.to_dict() for child in self],
-        }
-        # add WiiFS attributes
-        wii_header = self.wii.parse_header()
-        for k in ['game_code', 'maker_code', 'disk_id', 'version', 'game_name']:
-            out[k] = wii_header[k]
-        out['format'] = 'WII'
-        return out
+        super().__init__(fmt='WII', path=path, data=data)
 
 # map file formats to classes
 INPUT_FORMAT_TO_CLASS = {
