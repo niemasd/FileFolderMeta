@@ -5,7 +5,6 @@ Calculate metadata from file(s) / folder(s) nested within a given path
 
 # standard imports
 from datetime import datetime
-from gzip import open as gopen
 from hashlib import md5, sha1, sha256
 from io import BytesIO
 from json import dump as jdump
@@ -13,10 +12,12 @@ from pathlib import Path
 from sys import stderr
 from zlib import crc32
 import argparse
+import gzip
 
 # useful constants
-VERSION = '0.0.8'
+VERSION = '0.0.9'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
+COMPRESSED_EXTENSIONS = {'GZ'}
 
 # hash functionto calculate
 HASH_FUNCTIONS = {
@@ -43,6 +44,18 @@ try:
     from niemafs import GcmFS, IsoFS, TarFS, WiiFS, ZipFS
 except:
     error("Unable to import 'niemafs'. Install with: pip install niemafs")
+
+# clean a file extension
+def clean_ext(ext):
+    return ext.replace('.','').strip().upper()
+
+# decompress a data stream, or return it if already decompressed
+def decompress(path, data):
+    ext = clean_ext(path.suffix)
+    if ext == 'GZ':
+        return gzip.decompress(data)
+    else:
+        return data
 
 # class to represent the most generalized of entities (superclass of all other classes)
 class FFM_Entity:
@@ -141,7 +154,7 @@ class FFM_ZipArchive(FFM_File):
     def __iter__(self):
         if self.children is None:
             if self.zip is None:
-                self.zip = ZipFS(BytesIO(self.get_data()), 'r')
+                self.zip = ZipFS(BytesIO(decompress(self.path, self.get_data())))
             self.children = list()
             parse_descendants_niemafs(self, self.zip)
         return iter(self.children)
@@ -161,7 +174,7 @@ class FFM_TarArchive(FFM_File):
     def __iter__(self):
         if self.children is None:
             if self.tar is None:
-                self.tar = TarFS(BytesIO(self.get_data()), 'r')
+                self.tar = TarFS(BytesIO(decompress(self.path, self.get_data())))
             self.children = list()
             parse_descendants_niemafs(self, self.tar)
         return iter(self.children)
@@ -181,7 +194,7 @@ class FFM_IsoArchive(FFM_File):
     def __iter__(self):
         if self.children is None:
             if self.iso is None:
-                self.iso = IsoFS(BytesIO(self.get_data()), 'r')
+                self.iso = IsoFS(BytesIO(decompress(self.path, self.get_data())))
             self.children = list()
             parse_descendants_niemafs(self, self.iso)
         return iter(self.children)
@@ -214,7 +227,7 @@ class FFM_GcmArchive(FFM_File):
     def __iter__(self):
         if self.children is None:
             if self.gcm is None:
-                self.gcm = GcmFS(BytesIO(self.get_data()), 'r')
+                self.gcm = GcmFS(BytesIO(decompress(self.path, self.get_data())))
             self.children = list()
             parse_descendants_niemafs(self, self.gcm)
         return iter(self.children)
@@ -238,7 +251,7 @@ class FFM_WiiArchive(FFM_File):
     def __iter__(self):
         if self.children is None:
             if self.wii is None:
-                self.wii = WiiFS(BytesIO(self.get_data()), 'r')
+                self.wii = WiiFS(BytesIO(decompress(self.path, self.get_data())))
             self.children = list()
             parse_descendants_niemafs(self, self.wii)
         return iter(self.children)
@@ -272,7 +285,9 @@ def get_obj(path, data=None):
         return FFM_Directory(path)
 
     # try to infer class from file extension as last resort
-    ext = path.suffix.strip().lstrip('.').upper()
+    ext = clean_ext(path.suffix)
+    if ext in COMPRESSED_EXTENSIONS:
+        ext = clean_ext(path.suffixes[-2])
     if ext in INPUT_FORMAT_TO_CLASS:
         try:
             tmp = INPUT_FORMAT_TO_CLASS[ext](path, data=data)
@@ -326,7 +341,7 @@ def main():
     if args.output == 'stdout':
         from sys import stdout as output_f
     elif args.output.suffix.strip().lower() == '.gz':
-        output_f = gopen(args.output, 'wt')
+        output_f = gzip.open(args.output, 'wt')
     else:
         output_f = open(args.output, 'wt')
     jdump(root.to_dict(), output_f, indent=args.output_indent, sort_keys=args.output_sort)
