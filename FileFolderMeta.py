@@ -17,7 +17,7 @@ import gzip
 import lzma
 
 # useful constants
-VERSION = '0.0.13'
+__version__ = '0.0.13'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 COMPRESSED_EXTENSIONS = {'GZ', 'XZ'}
 

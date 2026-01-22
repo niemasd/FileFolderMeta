@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "FileFolderMeta"
+description = "Calculate metadata from file(s) / folder(s) nested within a given path"
+authors = [
+    {name = "Niema Moshiri", email = "niemamoshiri@gmail.com"},
+]
+maintainers = [
+    {name = "Niema Moshiri", email = "niemamoshiri@gmail.com"},
+]
+readme = "README.md"
+license-files = ["LICENSE"]
+dependencies = [
+    "niemafs>=0.0.12",
+]
+dynamic = ["version"]
+
+[tool.hatch.version]
+path = "FileFolderMeta.py"
+
+[project.urls]
+Homepage = "https://github.com/niemasd/FileFolderMeta"
+"Web App" = "https://niema.net/FileFolderMeta"
+Repository = "https://github.com/niemasd/FileFolderMeta.git"
+Issues = "https://github.com/niemasd/FileFolderMeta/issues"
+
+[project.scripts]
+FileFolderMeta = "FileFolderMeta:main"
