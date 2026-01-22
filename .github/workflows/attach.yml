@@ -1,0 +1,32 @@
+name: Attach Python script and wheel to release
+on:
+  release:
+    types: [published]
+jobs:
+  attach_py:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Upload FileFolderMeta.py to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: FileFolderMeta.py
+          asset_name: FileFolderMeta.py
+          tag: ${{ github.ref }}
+          overwrite: true
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update && \
+          sudo apt-get install python3-pip zip && \
+          pip wheel . && \
+          zip -9 wheelhouse.zip *.whl
+      - name: Upload wheelhouse.zip to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: {{ secrets.GITHUB_TOKEN }}
+          file: wheelhouse.zip
+          asset_name: wheelhouse.zip
+          tag: ${{ github.ref }}
+          overwrite: true
