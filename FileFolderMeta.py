@@ -17,7 +17,7 @@ import gzip
 import lzma
 
 # useful constants
-VERSION = '0.0.12'
+VERSION = '0.0.13'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 COMPRESSED_EXTENSIONS = {'GZ', 'XZ'}
 
@@ -109,7 +109,8 @@ class FFM_File(FFM_OnDisk):
     def __init__(self, path, data=None):
         super().__init__(path=path, data=data)
         self.stat_result = None # initialize upon first `stat` call
-        self.timestamp = None # initialize upon first `get_timestamp` call
+        self.create_time = None # initialize upon first call to `get_create_time` call
+        self.mod_time = None # initialize upon first `get_mod_time` call
     def get_data(self):
         if self.data is None:
             with open(self.path, 'rb') as self_f:
@@ -121,20 +122,27 @@ class FFM_File(FFM_OnDisk):
         if self.stat_result is None:
             self.stat_result = self.path.stat()
         return self.stat_result
-    def get_timestamp(self):
-        if self.timestamp == '': # '' denotes an intentional blank timestamp (e.g. file systems that don't have timestamps)
+    def get_create_time(self):
+        if self.create_time == '': # '' denotes an intentionally blank time (e.g. file systems that don't have timestamps)
             return None
-        if self.timestamp is None:
-            self.timestamp = datetime.fromtimestamp(self.stat().st_mtime).astimezone().strftime(TIMESTAMP_FORMAT_STRING)
-        return self.timestamp
+        if self.create_time is None:
+            self.create_time = datetime.fromtimestamp(self.stat().st_ctime).astimezone().strftime(TIMESTAMP_FORMAT_STRING)
+        return self.create_time
+    def get_mod_time(self):
+        if self.mod_time == '': # '' denotes an intentionally blank time (e.g. file systems that don't have timestamps)
+            return None
+        if self.mod_time is None:
+            self.mod_time = datetime.fromtimestamp(self.stat().st_mtime).astimezone().strftime(TIMESTAMP_FORMAT_STRING)
+        return self.mod_time
     def to_dict(self):
         out = super().to_dict() | {
             'format': 'FILE',
             'size': self.get_size(),
         } | {k:HASH_FUNCTIONS[k](self.get_data()) for k in sorted(HASH_FUNCTIONS.keys())}
-        timestamp = self.get_timestamp()
-        if timestamp != '':
-            out['date'] = timestamp
+        for k, func in [('create_time',self.get_create_time), ('mod_time',self.get_mod_time)]:
+            v = func()
+            if v is not None:
+                out[k] = v
         return out
 
 # class to represent NiemaFS-based classes
@@ -151,16 +159,17 @@ class FFM_NiemaFS(FFM_File):
                 self.fs = FORMAT_TO_NIEMAFS[self.format](BytesIO(decompress(self.path, self.get_data())))
             self.children = list()
             fs_path_to_obj = dict()
-            for curr_path, curr_timestamp, curr_data in self.fs:
+            for curr_path, curr_mod_time, curr_data in self.fs:
                 if curr_data is None:
                     obj = FFM_Directory(curr_path)
                 else:
                     obj = get_obj(path=curr_path, data=curr_data)
                     obj.data = curr_data
-                    if curr_timestamp is None:
-                        obj.timestamp = ''
+                    obj.create_time = ''
+                    if curr_mod_time is None:
+                        obj.mod_time = ''
                     else:
-                        obj.timestamp = curr_timestamp.strftime(TIMESTAMP_FORMAT_STRING)
+                        obj.mod_time = curr_mod_time.strftime(TIMESTAMP_FORMAT_STRING)
                 if '/' in str(curr_path):
                     parent_obj = fs_path_to_obj[curr_path.parent]
                     if parent_obj.children is None:
@@ -273,7 +282,8 @@ def parse_args():
     parser.add_argument('-i', '--input', required=True, type=str, help="Input File/Folder")
     parser.add_argument('-if', '--input_format', required=False, type=str, default='AUTO', help="Input File Format (options: %s)" % ', '.join(sorted(INPUT_FORMAT_TO_CLASS.keys())))
     parser.add_argument('-o', '--output', required=False, type=str, default='stdout', help="Output JSON File")
-    parser.add_argument('-oi', '--output_indent', required=False, type=int, default=None, help="Number of of Spaces per Indent in Output JSON")
+    parser.add_argument('-oi', '--output_indent', required=False, type=int, default=None, help="Number of Spaces per Indent in Output JSON")
+    parser.add_argument('-oit', '--output_indent_tab', action='store_true', help="Use Tabs (instead of spaces) for Indents in Output JSON")
     parser.add_argument('-os', '--output_sort', action='store_true', help="Sort Keys in Output JSON Alphabetically")
     args = parser.parse_args()
 
@@ -290,6 +300,11 @@ def parse_args():
             error("Output exists: %s" % args.output)
     if (args.output_indent is not None) and (args.output_indent < 0):
         error("Number of spaces per indent must be non-negative: %s" % args.output_indent)
+    if args.output_indent_tab:
+        if args.output_indent is None:
+            args.output_indent = '\t'
+        else:
+            args.output_indent = args.output_indent * '\t'
     return args
 
 # main content
