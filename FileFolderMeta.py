@@ -17,7 +17,7 @@ import gzip
 import lzma
 
 # useful constants
-__version__ = '0.0.15'
+__version__ = '0.0.16'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 COMPRESSED_EXTENSIONS = {'GZ', 'XZ'}
 
@@ -43,15 +43,16 @@ def error(s, exitcode=1, file=stderr):
 
 # non-standard imports
 try:
-    from niemafs import GcmFS, IsoFS, TarFS, TgcFS, ZipFS
+    from niemafs import GcmFS, GcRarcFS, IsoFS, TarFS, TgcFS, ZipFS
 except:
     error("Unable to import 'niemafs'. Install with: pip install niemafs")
 FORMAT_TO_NIEMAFS = {
-    'GCM': GcmFS,
-    'ISO': IsoFS,
-    'TAR': TarFS,
-    'TGC': TgcFS,
-    'ZIP': ZipFS,
+    'GCM':  GcmFS,
+    'ISO':  IsoFS,
+    'RARC': GcRarcFS,
+    'TAR':  TarFS,
+    'TGC':  TgcFS,
+    'ZIP':  ZipFS,
 }
 try:
     from niemafs import WiiFS
@@ -244,6 +245,11 @@ class FFM_TgcArchive(FFM_GcmArchive):
         super().__init__(path=path, data=data)
         self.format = 'TGC'
 
+# class to represent GameCube RARS (.arc) files
+class FFM_GcRarcArchive(FFM_NiemaFS):
+    def __init__(self, path, data=None):
+        super().__init__(fmt='RARC', path=path, data=data)
+
 # class to represent Wii DVDs
 class FFM_WiiArchive(FFM_NiemaFS):
     def __init__(self, path, data=None):
@@ -251,11 +257,13 @@ class FFM_WiiArchive(FFM_NiemaFS):
 
 # map file formats to classes
 INPUT_FORMAT_TO_CLASS = {
+    'ARC':  FFM_GcRarcArchive, # GameCube RARC files have .arc extension
     'BIN':  FFM_IsoArchive,
     'DIR':  FFM_Directory,
     'FILE': FFM_File,
     'GCM':  FFM_GcmArchive,
     'ISO':  FFM_IsoArchive,
+    'RARC': FFM_GcRarcArchive,
     'TAR':  FFM_TarArchive,
     'TGC':  FFM_TgcArchive,
     'ZIP':  FFM_ZipArchive,

@@ -14,7 +14,7 @@ maintainers = [
 readme = "README.md"
 license-files = ["LICENSE"]
 dependencies = [
-    "niemafs>=0.0.12",
+    "niemafs>=0.0.15",
 ]
 dynamic = ["version"]
 

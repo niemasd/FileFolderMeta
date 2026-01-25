@@ -15,6 +15,7 @@ Then, you can either open the JSON in your favorite JSON viewer / text editor, o
 * Directories
 * ISO 9660 Disc Images (e.g. ISO, BIN)
 * Nintendo GameCube Mini-DVD Images
+* Nintendo GameCube RARC (.arc) Archives
 * Nintendo GameCube TGC Images
 * Nintendo Wii DVD Images
 * ZIP Archives
