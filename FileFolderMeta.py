@@ -17,7 +17,7 @@ import gzip
 import lzma
 
 # useful constants
-__version__ = '0.0.16'
+__version__ = '0.0.17'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 COMPRESSED_EXTENSIONS = {'GZ', 'XZ'}
 
@@ -298,8 +298,7 @@ def parse_args():
     parser.add_argument('-i', '--input', required=True, type=str, help="Input File/Folder")
     parser.add_argument('-if', '--input_format', required=False, type=str, default='AUTO', help="Input File Format (options: %s)" % ', '.join(sorted(INPUT_FORMAT_TO_CLASS.keys())))
     parser.add_argument('-o', '--output', required=False, type=str, default='stdout', help="Output JSON File")
-    parser.add_argument('-oi', '--output_indent', required=False, type=int, default=None, help="Number of Spaces per Indent in Output JSON")
-    parser.add_argument('-oit', '--output_indent_tab', action='store_true', help="Use Tabs (instead of spaces) for Indents in Output JSON")
+    parser.add_argument('-oi', '--output_indent', required=False, type=str, default='\t', help="Indent String in Output JSON (or empty string, \"\", if compact JSON)")
     parser.add_argument('-os', '--output_sort', action='store_true', help="Sort Keys in Output JSON Alphabetically")
     args = parser.parse_args()
 
@@ -314,13 +313,8 @@ def parse_args():
         args.output = Path(args.output)
         if args.output.exists():
             error("Output exists: %s" % args.output)
-    if (args.output_indent is not None) and (args.output_indent < 0):
-        error("Number of spaces per indent must be non-negative: %s" % args.output_indent)
-    if args.output_indent_tab:
-        if args.output_indent is None:
-            args.output_indent = '\t'
-        else:
-            args.output_indent = args.output_indent * '\t'
+    if args.output_indent == '':
+        args.output_indent = None
     return args
 
 # main content
