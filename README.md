@@ -2,7 +2,7 @@
 Calculate metadata from file(s) / folder(s) nested within a given path
 
 ## Installation
-FileFolderMeta is written in Python and depends on the [NiemaFS](https://github.com/niemasd/NiemaFS) Python package. You can simply download [`FileFolderMeta.py`](FileFolderMeta.py) to your machine and run it.
+FileFolderMeta is written in Python and depends on the [NiemaFS](https://github.com/niemasd/NiemaFS) Python package. You can simply download [`FileFolderMeta.py`](https://github.com/niemasd/FileFolderMeta/releases/latest/download/FileFolderMeta.py) from the most recent Release to your machine and run it. If you require a [Wheel](https://packaging.python.org/en/latest/specifications/binary-distribution-format/), you can download [`wheelhouse.zip`](https://github.com/niemasd/FileFolderMeta/releases/latest/download/wheelhouse.zip), which contains `.whl` files for FileFolderMeta and all of its dependencies.
 
 ## Usage
 
