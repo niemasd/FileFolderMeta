@@ -386,7 +386,7 @@ def parse_args():
     parser.add_argument('-o', '--output', required=False, type=str, default='stdout', help="Output JSON File")
     parser.add_argument('-oi', '--output_indent', required=False, type=str, default='\t', help="Indent String in Output JSON (or empty string, \"\", if compact JSON)")
     parser.add_argument('-os', '--output_sort', action='store_true', help="Sort Keys in Output JSON Alphabetically")
-    parser.add_argument('--handle_binary_meta', required=False, type=str, default='OMIT', help="How to Handle Binary Metadata (e.g. missing volume data in ISOs) (options: %s)" % ', '.join(sorted(HANDLE_BINARY_META_OPTIONS)))
+    parser.add_argument('-hb', '--handle_binary_meta', required=False, type=str, default='OMIT', help="How to Handle Binary Metadata (e.g. missing volume data in ISOs) (options: %s)" % ', '.join(sorted(HANDLE_BINARY_META_OPTIONS)))
     args = parser.parse_args()
 
     # check args for validity before returning
