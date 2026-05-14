@@ -17,9 +17,10 @@ import gzip
 import lzma
 
 # useful constants
-__version__ = '0.0.18'
+__version__ = '0.0.19'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 COMPRESSED_EXTENSIONS = {'GZ', 'XZ'}
+HANDLE_BINARY_META_OPTIONS = {'OMIT', 'KEEP', 'NULL'}
 
 # hash functionto calculate
 HASH_FUNCTIONS = {
@@ -218,7 +219,7 @@ class FFM_NiemaFS(FFM_File):
                     try:
                         out[k] = v.strftime(TIMESTAMP_FORMAT_STRING)
                     except:
-                        out[k] = str(v)
+                        out[k] = v
 
         # HFS-specific attributes
         elif self.format == 'HFS':
@@ -385,6 +386,7 @@ def parse_args():
     parser.add_argument('-o', '--output', required=False, type=str, default='stdout', help="Output JSON File")
     parser.add_argument('-oi', '--output_indent', required=False, type=str, default='\t', help="Indent String in Output JSON (or empty string, \"\", if compact JSON)")
     parser.add_argument('-os', '--output_sort', action='store_true', help="Sort Keys in Output JSON Alphabetically")
+    parser.add_argument('--handle_binary_meta', required=False, type=str, default='OMIT', help="How to Handle Binary Metadata (e.g. missing volume data in ISOs) (options: %s)" % ', '.join(sorted(HANDLE_BINARY_META_OPTIONS)))
     args = parser.parse_args()
 
     # check args for validity before returning
@@ -400,6 +402,9 @@ def parse_args():
             error("Output exists: %s" % args.output)
     if args.output_indent == '':
         args.output_indent = None
+    args.handle_binary_meta = args.handle_binary_meta.strip().upper()
+    if args.handle_binary_meta not in HANDLE_BINARY_META_OPTIONS:
+        raise ValueError("Invalid 'Handle Binary' Mode: %s (options: %s)" % (args.handle_binary_meta, ', '.join(sorted(HANDLE_BINARY_META_OPTIONS))))
     return args
 
 # main content
@@ -414,6 +419,29 @@ def main():
         print_log("Using user-provided input format: %s" % args.input_format)
         root = INPUT_FORMAT_TO_CLASS[args.input_format](args.input)
 
+    # build output
+    out = root.to_dict()
+    to_visit = [out]
+    while len(to_visit) != 0:
+        curr = to_visit.pop()
+        if isinstance(curr, dict):
+            kv = list(curr.items())
+        elif isinstance(curr, list):
+            kv = list(enumerate(curr))
+        else:
+            continue # not a container
+        for k, v in kv:
+            to_visit.append(v)
+            if isinstance(v, bytes):
+                if args.handle_binary_meta == 'OMIT':
+                    del curr[k]
+                elif args.handle_binary_meta == 'KEEP':
+                    curr[k] = str(v)
+                elif args.handle_binary_meta == 'NULL':
+                    curr[k] = None
+                else:
+                    raise ValueError("Invalid 'Handle Binary' Mode: %s (options: %s)" % (args.handle_binary_meta, ', '.join(sorted(HANDLE_BINARY_META_OPTIONS))))
+
     # write output
     print_log("Writing Output: %s" % args.output)
     if args.output == 'stdout':
@@ -422,7 +450,7 @@ def main():
         output_f = gzip.open(args.output, 'wt')
     else:
         output_f = open(args.output, 'wt')
-    jdump(root.to_dict(), output_f, indent=args.output_indent, sort_keys=args.output_sort)
+    jdump(out, output_f, indent=args.output_indent, sort_keys=args.output_sort)
     output_f.write('\n')
     output_f.close()
 
