@@ -17,7 +17,7 @@ import gzip
 import lzma
 
 # useful constants
-__version__ = '0.0.17'
+__version__ = '0.0.18'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 COMPRESSED_EXTENSIONS = {'GZ', 'XZ'}
 
@@ -43,11 +43,16 @@ def error(s, exitcode=1, file=stderr):
 
 # non-standard imports
 try:
-    from niemafs import GcmFS, GcRarcFS, IsoFS, TarFS, TgcFS, ZipFS
+    from niemafs import GcmFS, GcRarcFS, HfsFS, IsoFS, TarFS, TgcFS, ZipFS
 except:
     error("Unable to import 'niemafs'. Install with: pip install niemafs")
+try:
+    from PIL import Image
+except:
+    error("Unable to import 'PIL'. Install with: pip install pillow")
 FORMAT_TO_NIEMAFS = {
     'GCM':  GcmFS,
+    #'HFS':  HfsFS,
     'ISO':  IsoFS,
     'RARC': GcRarcFS,
     'TAR':  TarFS,
@@ -147,6 +152,17 @@ class FFM_File(FFM_OnDisk):
                 out[k] = v
         return out
 
+# class to represent image files using Pillow
+class FFM_PIL(FFM_File):
+    def __init__(self, path, data=None):
+        super().__init__(path=path, data=data)
+        self.width, self.height = Image.open(BytesIO(self.get_data())).size
+    def to_dict(self):
+        return super().to_dict() | {
+            'width': self.width,
+            'height': self.height,
+        }
+
 # class to represent NiemaFS-based classes
 class FFM_NiemaFS(FFM_File):
     def __init__(self, fmt, path, data=None):
@@ -234,6 +250,11 @@ class FFM_IsoArchive(FFM_NiemaFS):
     def __init__(self, path, data=None):
         super().__init__(fmt='ISO', path=path, data=data)
 
+# class to represent HFS files
+#class FFM_HfsArchive(FFM_NiemaFS):
+#    def __init__(self, path, data=None):
+#        super().__init__(fmt='HFS', path=path, data=data)
+
 # class to represent GameCube mini-DVDs
 class FFM_GcmArchive(FFM_NiemaFS):
     def __init__(self, path, data=None):
@@ -257,15 +278,57 @@ class FFM_WiiArchive(FFM_NiemaFS):
 
 # map file formats to classes
 INPUT_FORMAT_TO_CLASS = {
+    'APNG': FFM_PIL,
     'ARC':  FFM_GcRarcArchive, # GameCube RARC files have .arc extension
+    'AVIF': FFM_PIL,
     'BIN':  FFM_IsoArchive,
+    'BLP':  FFM_PIL,
+    'BMP':  FFM_PIL,
+    'CUR':  FFM_PIL,
+    'DCX':  FFM_PIL,
+    'DDS':  FFM_PIL,
+    'DIB':  FFM_PIL,
     'DIR':  FFM_Directory,
+    'EPS':  FFM_PIL,
     'FILE': FFM_File,
+    'FITS': FFM_PIL,
+    'FLC':  FFM_PIL,
+    'FLI':  FFM_PIL,
+    'FPX':  FFM_PIL,
+    'FTEX': FFM_PIL,
+    'GBR':  FFM_PIL,
     'GCM':  FFM_GcmArchive,
+    'GIF':  FFM_PIL,
+    #'HFS':  FFM_HfsArchive,
+    'ICNS': FFM_PIL,
+    'ICO':  FFM_PIL,
+    'IM':   FFM_PIL,
+    'IMT':  FFM_PIL,
     'ISO':  FFM_IsoArchive,
+    'JFIF': FFM_PIL,
+    'JPEG': FFM_PIL,
+    'JPG':  FFM_PIL,
+    'MIC':  FFM_PIL,
+    'MPO':  FFM_PIL,
+    'MSP':  FFM_PIL,
+    'PBM':  FFM_PIL,
+    'PCD':  FFM_PIL,
+    'PCX':  FFM_PIL,
+    'PFM':  FFM_PIL,
+    'PGM':  FFM_PIL,
+    'PNG':  FFM_PIL,
+    'PPM':  FFM_PIL,
+    'PSD':  FFM_PIL,
+    'QOI':  FFM_PIL,
     'RARC': FFM_GcRarcArchive,
+    'SGI':  FFM_PIL,
+    'SPI':  FFM_PIL,
+    'SUN':  FFM_PIL,
     'TAR':  FFM_TarArchive,
     'TGC':  FFM_TgcArchive,
+    'WEBP': FFM_PIL,
+    'XBM':  FFM_PIL,
+    'XPM':  FFM_PIL,
     'ZIP':  FFM_ZipArchive,
 }
 if WiiFS is not None:
@@ -284,7 +347,10 @@ def get_obj(path, data=None):
     if ext in INPUT_FORMAT_TO_CLASS:
         try:
             tmp = INPUT_FORMAT_TO_CLASS[ext](path, data=data)
-            list(tmp) # trigger actually setting up object
+            try:
+                list(tmp) # trigger actually setting up object
+            except:
+                pass
             return tmp
         except:
             pass # if fails (e.g. BIN is just a binary file, not ISO), just default to FFM_File
