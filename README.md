@@ -13,6 +13,7 @@ Then, you can either open the JSON in your favorite JSON viewer / text editor, o
 ## Supported Formats
 * Binary Files
 * Directories
+* HFS (Apple) Images
 * ISO 9660 Disc Images (e.g. ISO, BIN)
 * Nintendo GameCube Mini-DVD Images
 * Nintendo GameCube RARC (.arc) Archives
