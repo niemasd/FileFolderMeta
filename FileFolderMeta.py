@@ -52,7 +52,7 @@ except:
     error("Unable to import 'PIL'. Install with: pip install pillow")
 FORMAT_TO_NIEMAFS = {
     'GCM':  GcmFS,
-    #'HFS':  HfsFS,
+    'HFS':  HfsFS,
     'ISO':  IsoFS,
     'RARC': GcRarcFS,
     'TAR':  TarFS,
@@ -159,7 +159,8 @@ class FFM_PIL(FFM_File):
         self.width, self.height = Image.open(BytesIO(self.get_data())).size
     def to_dict(self):
         return super().to_dict() | {
-            'width': self.width,
+            'format': 'IMAGE',
+            'width':  self.width,
             'height': self.height,
         }
 
@@ -251,9 +252,9 @@ class FFM_IsoArchive(FFM_NiemaFS):
         super().__init__(fmt='ISO', path=path, data=data)
 
 # class to represent HFS files
-#class FFM_HfsArchive(FFM_NiemaFS):
-#    def __init__(self, path, data=None):
-#        super().__init__(fmt='HFS', path=path, data=data)
+class FFM_HfsArchive(FFM_NiemaFS):
+    def __init__(self, path, data=None):
+        super().__init__(fmt='HFS', path=path, data=data)
 
 # class to represent GameCube mini-DVDs
 class FFM_GcmArchive(FFM_NiemaFS):
@@ -299,7 +300,7 @@ INPUT_FORMAT_TO_CLASS = {
     'GBR':  FFM_PIL,
     'GCM':  FFM_GcmArchive,
     'GIF':  FFM_PIL,
-    #'HFS':  FFM_HfsArchive,
+    'HFS':  FFM_HfsArchive,
     'ICNS': FFM_PIL,
     'ICO':  FFM_PIL,
     'IM':   FFM_PIL,
