@@ -220,6 +220,13 @@ class FFM_NiemaFS(FFM_File):
                     except:
                         out[k] = str(v)
 
+        # HFS-specific attributes
+        elif self.format == 'HFS':
+            mdb = self.fs.parse_master_directory_block()
+            out['mdb_created'] = mdb['created'].strftime(TIMESTAMP_FORMAT_STRING)
+            out['mdb_modified'] = mdb['modified'].strftime(TIMESTAMP_FORMAT_STRING)
+            out['volume_name'] = mdb['volume_name']
+
         # GameCube-specific attributes
         elif self.format == 'GCM':
             gcm_boot_bin = self.fs.parse_boot_bin()
@@ -282,7 +289,6 @@ INPUT_FORMAT_TO_CLASS = {
     'APNG': FFM_PIL,
     'ARC':  FFM_GcRarcArchive, # GameCube RARC files have .arc extension
     'AVIF': FFM_PIL,
-    'BIN':  FFM_IsoArchive,
     'BLP':  FFM_PIL,
     'BMP':  FFM_PIL,
     'CUR':  FFM_PIL,
@@ -327,6 +333,8 @@ INPUT_FORMAT_TO_CLASS = {
     'SUN':  FFM_PIL,
     'TAR':  FFM_TarArchive,
     'TGC':  FFM_TgcArchive,
+    'TIF':  FFM_PIL,
+    'TIFF': FFM_PIL,
     'WEBP': FFM_PIL,
     'XBM':  FFM_PIL,
     'XPM':  FFM_PIL,
@@ -343,9 +351,19 @@ def get_obj(path, data=None):
 
     # try to infer class from file extension as last resort
     ext = clean_ext(path.suffix)
+    if ';' in ext: # ISO 9660
+        ext = ext.split(';')[0].strip()
     if ext in COMPRESSED_EXTENSIONS:
         ext = clean_ext(path.suffixes[-2])
-    if ext in INPUT_FORMAT_TO_CLASS:
+    if ext == 'BIN': # handle BIN files (could be ISO 9660, could be HFS, etc.)
+        for cls in [FFM_HfsArchive, FFM_IsoArchive]:
+            try:
+                tmp = cls(path, data=data)
+                list(tmp) # trigger actually setting up object
+                return tmp
+            except:
+                pass
+    elif ext in INPUT_FORMAT_TO_CLASS:
         try:
             tmp = INPUT_FORMAT_TO_CLASS[ext](path, data=data)
             try:
