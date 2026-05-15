@@ -17,7 +17,7 @@ import gzip
 import lzma
 
 # useful constants
-__version__ = '0.0.19'
+__version__ = '0.0.20'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 COMPRESSED_EXTENSIONS = {'GZ', 'XZ'}
 HANDLE_BINARY_META_OPTIONS = {'OMIT', 'KEEP', 'NULL'}
@@ -42,15 +42,11 @@ def print_log(s='', end='\n', file=stderr):
 def error(s, exitcode=1, file=stderr):
     print_log(s, file=file); exit(exitcode)
 
-# non-standard imports
+# NiemaFS
 try:
     from niemafs import GcmFS, GcRarcFS, HfsFS, IsoFS, TarFS, TgcFS, ZipFS
 except:
     error("Unable to import 'niemafs'. Install with: pip install niemafs")
-try:
-    from PIL import Image
-except:
-    error("Unable to import 'PIL'. Install with: pip install pillow")
 FORMAT_TO_NIEMAFS = {
     'GCM':  GcmFS,
     'HFS':  HfsFS,
@@ -66,6 +62,53 @@ try:
 except:
     warn("Unable to import 'niemafs.WiiFS' (likely due to missing dependencies). Wii support disabled.")
     WiiFS = None
+
+# PIL (Pillow)
+try:
+    from PIL import Image
+except:
+    error("Unable to import 'PIL'. Install with: pip install pillow")
+
+# Mutagen
+try:
+    from mutagen.aac import AAC
+    from mutagen.ac3 import AC3
+    from mutagen.aiff import AIFF
+    from mutagen.asf import ASF
+    from mutagen.dsdiff import DSDIFF
+    from mutagen.dsf import DSF
+    from mutagen.flac import FLAC
+    from mutagen.monkeysaudio import MonkeysAudio
+    from mutagen.mp3 import MP3
+    from mutagen.mp4 import MP4
+    from mutagen.musepack import Musepack
+    from mutagen.oggopus import OggOpus
+    from mutagen.oggvorbis import OggVorbis
+    from mutagen.optimfrog import OptimFROG
+    from mutagen.smf import SMF
+    from mutagen.tak import TAK
+    from mutagen.wave import WAVE
+except:
+    error("Unable to import 'mutagen'. Install with: pip install mutagen")
+FORMAT_TO_MUTAGEN = {
+    'AAC':       AAC,
+    'AC3':       AC3,
+    'AIFF':      AIFF,
+    'ASF':       ASF,
+    'DSDIFF':    DSDIFF,
+    'DSF':       DSF,
+    'FLAC':      FLAC,
+    'MIDI':      SMF,
+    'MONKEY':    MonkeysAudio,
+    'MP3':       MP3,
+    'MP4':       MP4,
+    'MUSEPACK':  Musepack,
+    'OPTIMFROG': OptimFROG,
+    'OPUS':      OggOpus,
+    'TAK':       TAK,
+    'VORBIS':    OggVorbis,
+    'WAVE':      WAVE,
+}
 
 # clean a file extension
 def clean_ext(ext):
@@ -157,13 +200,26 @@ class FFM_File(FFM_OnDisk):
 class FFM_PIL(FFM_File):
     def __init__(self, path, data=None):
         super().__init__(path=path, data=data)
-        self.width, self.height = Image.open(BytesIO(self.get_data())).size
+        self.img = Image.open(BytesIO(self.get_data()))
     def to_dict(self):
+        w, h = self.img.size
         return super().to_dict() | {
             'format': 'IMAGE',
-            'width':  self.width,
-            'height': self.height,
+            'width':  w,
+            'height': h,
         }
+
+# class to represent Mutagen-based classes
+class FFM_mutagen(FFM_File):
+    def __init__(self, fmt, path, data=None):
+        super().__init__(path=path, data=data)
+        self.audio = FORMAT_TO_MUTAGEN[fmt](BytesIO(self.get_data()))
+    def to_dict(self):
+        out = super().to_dict() | {'format': 'AUDIO'}
+        for a, k in [('channels','channels'), ('length','duration'), ('sample_rate','sample_rate'), ('bitrate','bitrate')]:
+            if hasattr(self.audio.info, a):
+                out[k] = getattr(self.audio.info, a)
+        return out
 
 # class to represent NiemaFS-based classes
 class FFM_NiemaFS(FFM_File):
@@ -287,6 +343,12 @@ class FFM_WiiArchive(FFM_NiemaFS):
 
 # map file formats to classes
 INPUT_FORMAT_TO_CLASS = {
+    'AAC':  lambda path, data=None: FFM_mutagen(fmt='AAC', path=path, data=data),
+    'AC3':  lambda path, data=None: FFM_mutagen(fmt='AC3', path=path, data=data),
+    'AIF':  lambda path, data=None: FFM_mutagen(fmt='AIFF', path=path, data=data),
+    'AIFC': lambda path, data=None: FFM_mutagen(fmt='AIFF', path=path, data=data),
+    'AIFF': lambda path, data=None: FFM_mutagen(fmt='AIFF', path=path, data=data),
+    'APE':  lambda path, data=None: FFM_mutagen(fmt='MONKEY', path=path, data=data),
     'APNG': FFM_PIL,
     'ARC':  FFM_GcRarcArchive, # GameCube RARC files have .arc extension
     'AVIF': FFM_PIL,
@@ -295,11 +357,14 @@ INPUT_FORMAT_TO_CLASS = {
     'CUR':  FFM_PIL,
     'DCX':  FFM_PIL,
     'DDS':  FFM_PIL,
+    'DFF':  lambda path, data=None: FFM_mutagen(fmt='DSDIFF', path=path, data=data),
     'DIB':  FFM_PIL,
     'DIR':  FFM_Directory,
+    'DSF':  lambda path, data=None: FFM_mutagen(fmt='DSF', path=path, data=data),
     'EPS':  FFM_PIL,
     'FILE': FFM_File,
     'FITS': FFM_PIL,
+    'FLAC': lambda path, data=None: FFM_mutagen(fmt='FLAC', path=path, data=data),
     'FLC':  FFM_PIL,
     'FLI':  FFM_PIL,
     'FPX':  FFM_PIL,
@@ -316,9 +381,21 @@ INPUT_FORMAT_TO_CLASS = {
     'JFIF': FFM_PIL,
     'JPEG': FFM_PIL,
     'JPG':  FFM_PIL,
+    'M4A':  lambda path, data=None: FFM_mutagen(fmt='MP4', path=path, data=data),
+    'M4B':  lambda path, data=None: FFM_mutagen(fmt='MP4', path=path, data=data),
+    'M4P':  lambda path, data=None: FFM_mutagen(fmt='MP4', path=path, data=data),
     'MIC':  FFM_PIL,
+    'MID':  lambda path, data=None: FFM_mutagen(fmt='MIDI', path=path, data=data),
+    'MIDI': lambda path, data=None: FFM_mutagen(fmt='MIDI', path=path, data=data),
+    'MP2':  lambda path, data=None: FFM_mutagen(fmt='MP3', path=path, data=data),
+    'MP3':  lambda path, data=None: FFM_mutagen(fmt='MP3', path=path, data=data),
+    'MPA':  lambda path, data=None: FFM_mutagen(fmt='MP3', path=path, data=data),
+    'MPC':  lambda path, data=None: FFM_mutagen(fmt='MUSEPACK', path=path, data=data),
     'MPO':  FFM_PIL,
     'MSP':  FFM_PIL,
+    'OFR':  lambda path, data=None: FFM_mutagen(fmt='OPTIMFROG', path=path, data=data),
+    'OGG':  lambda path, data=None: FFM_mutagen(fmt='VORBIS', path=path, data=data),
+    'OPUS': lambda path, data=None: FFM_mutagen(fmt='OPUS', path=path, data=data),
     'PBM':  FFM_PIL,
     'PCD':  FFM_PIL,
     'PCX':  FFM_PIL,
@@ -332,11 +409,15 @@ INPUT_FORMAT_TO_CLASS = {
     'SGI':  FFM_PIL,
     'SPI':  FFM_PIL,
     'SUN':  FFM_PIL,
+    'TAK':  lambda path, data=None: FFM_mutagen(fmt='TAK', path=path, data=data),
     'TAR':  FFM_TarArchive,
     'TGC':  FFM_TgcArchive,
     'TIF':  FFM_PIL,
     'TIFF': FFM_PIL,
+    'WAV':  lambda path, data=None: FFM_mutagen(fmt='WAVE', path=path, data=data),
+    'WAVE': lambda path, data=None: FFM_mutagen(fmt='WAVE', path=path, data=data),
     'WEBP': FFM_PIL,
+    'WMA':  lambda path, data=None: FFM_mutagen(fmt='ASF', path=path, data=data),
     'XBM':  FFM_PIL,
     'XPM':  FFM_PIL,
     'ZIP':  FFM_ZipArchive,
