@@ -17,9 +17,11 @@ You can run the [`FileFolderMeta.py`](FileFolderMeta.py) script to produce a JSO
 Then, you can either open the JSON in your favorite JSON viewer / text editor, or you can use the companion [interactive web application](https://niema.net/FileFolderMeta) to view the metadata.
 
 ## Supported Formats
+* Audio Files
 * Binary Files
 * Directories
-* HFS (Apple) Images
+* HFS (Apple) Disc/Volume Images
+* Images
 * ISO 9660 Disc Images (e.g. ISO, BIN)
 * Nintendo GameCube Mini-DVD Images
 * Nintendo GameCube RARC (.arc) Archives
