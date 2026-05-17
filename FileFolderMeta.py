@@ -470,6 +470,7 @@ def parse_args():
     parser.add_argument('-hb', '--handle_binary_meta', required=False, type=str, default='OMIT', help="How to Handle Binary Metadata (e.g. missing volume data in ISOs) (options: %s)" % ', '.join(sorted(HANDLE_BINARY_META_OPTIONS)))
     parser.add_argument('-pa', '--parse_audio', action='store_true', help="Parse Audio Files (e.g. duration, bitrate, etc.)")
     parser.add_argument('-pi', '--parse_image', action='store_true', help="Parse Image Files (e.g. width, height, etc.)")
+    parser.add_argument('-v', '--verbosity', required=False, type=int, default=1, help="Verbosity (0 = quiet; 1 = logs; 2 = logs + warnings)")
     args = parser.parse_args()
 
     # check args for validity before returning
@@ -488,6 +489,12 @@ def parse_args():
     args.handle_binary_meta = args.handle_binary_meta.strip().upper()
     if args.handle_binary_meta not in HANDLE_BINARY_META_OPTIONS:
         raise ValueError("Invalid 'Handle Binary' Mode: %s (options: %s)" % (args.handle_binary_meta, ', '.join(sorted(HANDLE_BINARY_META_OPTIONS))))
+    if args.verbosity < 0 or args.verbosity > 2:
+        raise ValueError("Invalid verbosity: %s" % args.verbosity)
+    elif args.verbosity < 2:
+        from warnings import filterwarnings; filterwarnings('ignore')
+        if args.verbosity == 0:
+            globals()['print_log'] = lambda *args, **kwargs: None
     return args
 
 # main content
