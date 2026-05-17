@@ -17,16 +17,16 @@ import gzip
 import lzma
 
 # useful constants
-__version__ = '0.0.20'
+__version__ = '0.0.21'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 COMPRESSED_EXTENSIONS = {'GZ', 'XZ'}
 HANDLE_BINARY_META_OPTIONS = {'OMIT', 'KEEP', 'NULL'}
 
 # hash functionto calculate
 HASH_FUNCTIONS = {
-    'crc32': lambda x: '0x' + f'{crc32(x):08x}',
-    'md5': lambda x: '0x' + md5(x).hexdigest(),
-    'sha1': lambda x: '0x' + sha1(x).hexdigest(),
+    'crc32':  lambda x: '0x' + f'{crc32(x):08x}',
+    'md5':    lambda x: '0x' + md5(x).hexdigest(),
+    'sha1':   lambda x: '0x' + sha1(x).hexdigest(),
     'sha256': lambda x: '0x' + sha256(x).hexdigest(),
 }
 
@@ -468,6 +468,8 @@ def parse_args():
     parser.add_argument('-oi', '--output_indent', required=False, type=str, default='\t', help="Indent String in Output JSON (or empty string, \"\", if compact JSON)")
     parser.add_argument('-os', '--output_sort', action='store_true', help="Sort Keys in Output JSON Alphabetically")
     parser.add_argument('-hb', '--handle_binary_meta', required=False, type=str, default='OMIT', help="How to Handle Binary Metadata (e.g. missing volume data in ISOs) (options: %s)" % ', '.join(sorted(HANDLE_BINARY_META_OPTIONS)))
+    parser.add_argument('-pa', '--parse_audio', action='store_true', help="Parse Audio Files (e.g. duration, bitrate, etc.)")
+    parser.add_argument('-pi', '--parse_image', action='store_true', help="Parse Image Files (e.g. width, height, etc.)")
     args = parser.parse_args()
 
     # check args for validity before returning
@@ -492,6 +494,11 @@ def parse_args():
 def main():
     # load input
     args = parse_args()
+    for parse_bool, ffm_class in [(args.parse_audio,FFM_mutagen), (args.parse_image,FFM_PIL)]:
+        if not parse_bool:
+            for name, attr in ffm_class.__dict__.items():
+                if callable(attr):
+                    setattr(ffm_class, name, getattr(FFM_File,name))
     print_log("Loading Input: %s" % args.input)
     if args.input_format == 'AUTO':
         print_log("Attempting to automatically infer input format...")
