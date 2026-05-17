@@ -17,17 +17,17 @@ import gzip
 import lzma
 
 # useful constants
-__version__ = '0.0.21'
+__version__ = '0.0.22'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 COMPRESSED_EXTENSIONS = {'GZ', 'XZ'}
 HANDLE_BINARY_META_OPTIONS = {'OMIT', 'KEEP', 'NULL'}
 
 # hash functionto calculate
 HASH_FUNCTIONS = {
-    'crc32':  lambda x: '0x' + f'{crc32(x):08x}',
-    'md5':    lambda x: '0x' + md5(x).hexdigest(),
-    'sha1':   lambda x: '0x' + sha1(x).hexdigest(),
-    'sha256': lambda x: '0x' + sha256(x).hexdigest(),
+    'crc32':  lambda x: f'{crc32(x):08x}',
+    'md5':    lambda x: md5(x).hexdigest(),
+    'sha1':   lambda x: sha1(x).hexdigest(),
+    'sha256': lambda x: sha256(x).hexdigest(),
 }
 
 # return the current time as a string
