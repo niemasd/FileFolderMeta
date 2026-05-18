@@ -15,7 +15,7 @@ readme = "README.md"
 license-files = ["LICENSE"]
 dependencies = [
     "mutagen",
-    "niemafs>=0.0.18",
+    "niemafs>=0.0.19",
     "pillow",
 ]
 dynamic = ["version"]
