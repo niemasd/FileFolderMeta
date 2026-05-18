@@ -17,7 +17,7 @@ import gzip
 import lzma
 
 # useful constants
-__version__ = '0.0.23'
+__version__ = '0.0.24'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 COMPRESSED_EXTENSIONS = {'GZ', 'XZ'}
 HANDLE_BINARY_META_OPTIONS = {'OMIT', 'KEEP', 'NULL'}
@@ -246,7 +246,7 @@ class FFM_NiemaFS(FFM_File):
                         obj.mod_time = ''
                     else:
                         obj.mod_time = curr_mod_time.strftime(TIMESTAMP_FORMAT_STRING)
-                if '/' in str(curr_path):
+                if hasattr(curr_path, 'parent') and (curr_path.parent in fs_path_to_obj):
                     parent_obj = fs_path_to_obj[curr_path.parent]
                     if parent_obj.children is None:
                         parent_obj.children = list()
