@@ -17,7 +17,7 @@ import gzip
 import lzma
 
 # useful constants
-__version__ = '0.0.25'
+__version__ = '0.0.26'
 TIMESTAMP_FORMAT_STRING = "%Y-%m-%d %H:%M:%S"
 COMPRESSED_EXTENSIONS = {'GZ', 'XZ'}
 HANDLE_BINARY_META_OPTIONS = {'OMIT', 'KEEP', 'NULL'}
@@ -437,7 +437,7 @@ def get_obj(path, data=None):
         ext = ext.split(';')[0].strip()
     if ext in COMPRESSED_EXTENSIONS:
         ext = clean_ext(path.suffixes[-2])
-    if ext == 'BIN': # handle BIN files (could be ISO 9660, could be HFS, etc.)
+    if ext in {'BIN','ISO'}: # handle BIN/ISO files (could be ISO 9660, could be HFS, etc.)
         for cls in [FFM_HfsArchive, FFM_IsoArchive]:
             try:
                 tmp = cls(path, data=data)
